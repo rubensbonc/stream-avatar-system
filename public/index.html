@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Avatars</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Nav -->
+    <nav id="navbar">
+      <div class="nav-brand">
+        <span class="logo">✦</span> Stream Avatars
+      </div>
+      <div class="nav-links" id="navLinks">
+        <a href="#" data-page="avatar" class="nav-link active">Avatar</a>
+        <a href="#" data-page="shop" class="nav-link">Shop</a>
+        <a href="#" data-page="inventory" class="nav-link">Inventory</a>
+        <a href="#" data-page="leaderboard" class="nav-link">Leaderboard</a>
+        <a href="#" data-page="admin" class="nav-link" id="adminLink" style="display:none">Admin</a>
+      </div>
+      <div class="nav-user" id="navUser">
+        <a href="/auth/twitch" class="btn btn-twitch" id="loginBtnTwitch">Login with Twitch</a>
+        <a href="/auth/youtube" class="btn btn-youtube" id="loginBtnYoutube">Login with YouTube</a>
+        <div id="userInfo" style="display:none">
+          <span class="points-display">✦ <span id="pointsDisplay">0</span></span>
+          <span class="streak-display" id="streakDisplay" title="Watch streak"></span>
+          <span class="user-name" id="userName"></span>
+          <button class="btn btn-sm btn-secondary" onclick="app.logout()">Logout</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Pages -->
+    <main id="mainContent">
+      <!-- Avatar Page -->
+      <div id="page-avatar" class="page active">
+        <div class="avatar-editor">
+          <div class="avatar-preview-panel">
+            <h2>Your Avatar</h2>
+            <div class="avatar-canvas-container">
+              <canvas id="avatarCanvas" width="1080" height="1080"></canvas>
+            </div>
+            <button class="btn btn-primary" onclick="app.dailySpin()" id="spinBtn">Daily Spin 🎰</button>
+          </div>
+          <div class="avatar-equip-panel">
+            <h2>Equipped Items</h2>
+            <div id="equippedList" class="equipped-grid">
+              <p class="text-muted">Login to customize your avatar</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shop Page -->
+      <div id="page-shop" class="page">
+        <h2>Cosmetic Shop</h2>
+        <div class="shop-filters">
+          <select id="shopLayerFilter" onchange="app.filterShop()">
+            <option value="">All Categories</option>
+          </select>
+          <select id="shopRarityFilter" onchange="app.filterShop()">
+            <option value="">All Rarities</option>
+            <option value="common">Common</option>
+            <option value="uncommon">Uncommon</option>
+            <option value="rare">Rare</option>
+            <option value="epic">Epic</option>
+            <option value="legendary">Legendary</option>
+          </select>
+        </div>
+        <div id="shopGrid" class="item-grid"></div>
+      </div>
+
+      <!-- Inventory Page -->
+      <div id="page-inventory" class="page">
+        <h2>Your Collection</h2>
+        <div id="inventoryGrid" class="item-grid"></div>
+      </div>
+
+      <!-- Leaderboard Page -->
+      <div id="page-leaderboard" class="page">
+        <h2>Leaderboard</h2>
+        <div class="leaderboard-tabs">
+          <button class="btn btn-sm active" onclick="app.loadLeaderboard('points')">Points</button>
+          <button class="btn btn-sm" onclick="app.loadLeaderboard('watch_time')">Watch Time</button>
+          <button class="btn btn-sm" onclick="app.loadLeaderboard('items')">Collection</button>
+        </div>
+        <div id="leaderboardList" class="leaderboard"></div>
+      </div>
+
+      <!-- Admin Page -->
+      <div id="page-admin" class="page">
+        <h2>Admin Panel</h2>
+        <div class="admin-sections">
+          <!-- Stats -->
+          <div class="admin-card">
+            <h3>Dashboard</h3>
+            <div id="adminStats" class="stats-grid"></div>
+          </div>
+
+          <!-- Upload Item -->
+          <div class="admin-card">
+            <h3>Upload Cosmetic Item</h3>
+            <form id="uploadForm" onsubmit="app.uploadItem(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Name</label>
+                  <input type="text" name="name" required>
+                </div>
+                <div class="form-group">
+                  <label>Layer Type</label>
+                  <select name="layer_type" required id="adminLayerSelect"></select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Rarity</label>
+                  <select name="rarity">
+                    <option value="common">Common</option>
+                    <option value="uncommon">Uncommon</option>
+                    <option value="rare">Rare</option>
+                    <option value="epic">Epic</option>
+                    <option value="legendary">Legendary</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Unlock Type</label>
+                  <select name="unlock_type" id="unlockTypeSelect" onchange="app.toggleUnlockFields()">
+                    <option value="free">Free</option>
+                    <option value="points" selected>Points</option>
+                    <option value="watch_time">Watch Time</option>
+                    <option value="sub_only">Sub Only</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row" id="unlockCostRow">
+                <div class="form-group">
+                  <label>Cost (points)</label>
+                  <input type="number" name="unlock_cost" value="100" min="0">
+                </div>
+                <div class="form-group" id="thresholdGroup" style="display:none">
+                  <label>Watch Time Threshold (minutes)</label>
+                  <input type="number" name="unlock_threshold" min="0">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" rows="2"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Image (PNG, transparent background, consistent canvas size)</label>
+                <input type="file" name="image" accept=".png,.webp,.gif" required>
+              </div>
+              <div class="form-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="is_default"> Default (auto-equipped for new users)
+                </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="is_limited" onchange="app.toggleLimitedFields(this.checked)"> Limited Time
+                </label>
+              </div>
+              <div class="form-row limited-fields" id="limitedFields" style="display:none">
+                <div class="form-group">
+                  <label>Available From (optional)</label>
+                  <input type="datetime-local" name="available_from">
+                </div>
+                <div class="form-group">
+                  <label>Available Until (required for limited)</label>
+                  <input type="datetime-local" name="available_until">
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">Upload Item</button>
+            </form>
+          </div>
+
+          <!-- Economy Controls -->
+          <div class="admin-card">
+            <h3>Economy Controls</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Points Multiplier</label>
+                <input type="number" id="multiplierInput" value="1" min="0.1" step="0.1">
+                <button class="btn btn-sm btn-primary" onclick="app.setMultiplier()">Set</button>
+              </div>
+              <div class="form-group">
+                <label>Double Points</label>
+                <button class="btn btn-sm btn-success" id="doublePointsBtn" onclick="app.toggleDoublePoints()">
+                  Activate Double Points
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manage Items -->
+          <div class="admin-card">
+            <h3>All Items</h3>
+            <div id="adminItemsList" class="admin-items-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Settings (Modal) -->
+      <div id="settingsModal" class="modal" style="display:none">
+        <div class="modal-content">
+          <h2>Link Accounts</h2>
+          <p>Link your accounts so you earn points from any platform.</p>
+
+          <div id="linkedAccountsList"></div>
+
+          <div id="linkOptions" class="link-options">
+            <a href="/auth/link/twitch/oauth" class="btn btn-twitch link-btn" id="linkTwitchBtn">
+              💜 Link Twitch Account
+            </a>
+            <a href="/auth/link/youtube/oauth" class="btn btn-youtube link-btn" id="linkYoutubeBtn">
+              🔴 Link YouTube Account
+            </a>
+            <div class="link-section" id="linkSeSection">
+              <div class="form-group">
+                <label>StreamElements email (for donation tracking)</label>
+                <input type="email" id="seEmail" placeholder="your@email.com">
+                <button class="btn btn-sm btn-primary" onclick="app.linkStreamElements()">🔷 Link StreamElements</button>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary mt-2" onclick="app.closeSettings()">Close</button>
+
+          <div class="danger-zone">
+            <h3>Danger Zone</h3>
+            <p>Permanently delete your account and all associated data. This cannot be undone.</p>
+            <button class="btn btn-danger" onclick="app.deleteAccount()">Delete My Account</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item Detail Modal (Admin) -->
+      <div id="itemDetailModal" class="modal" style="display:none">
+        <div class="modal-content modal-wide">
+          <div class="item-detail-header">
+            <div class="item-detail-preview" id="itemDetailPreview"></div>
+            <div class="item-detail-info" id="itemDetailInfo"></div>
+          </div>
+
+          <div class="item-detail-actions" id="itemDetailActions"></div>
+
+          <div class="item-detail-section">
+            <h3>Owners <span id="itemOwnerCount" class="text-muted"></span></h3>
+            <div class="item-search-grant">
+              <input type="text" id="grantUserSearch" placeholder="Search user to grant item..." oninput="app.searchUsersForGrant(this.value)">
+              <div id="grantUserResults" class="search-results"></div>
+            </div>
+            <div id="itemOwnersList" class="owners-list"></div>
+          </div>
+
+          <button class="btn btn-secondary mt-2" onclick="app.closeItemDetail()">Close</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

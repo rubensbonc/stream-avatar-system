@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Avatar Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: transparent; overflow: hidden; }
+    #avatarCanvas {
+      width: 1080px;
+      height: 1080px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="avatarCanvas" width="1080" height="1080"></canvas>
+
+  <script>
+    const canvas = document.getElementById('avatarCanvas');
+    const ctx = canvas.getContext('2d');
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let ws;
+
+    function connect() {
+      ws = new WebSocket(`${protocol}//${location.host}/ws?channel=overlay`);
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'show_avatar') renderAvatar(msg.data);
+        if (msg.type === 'hide_avatar') clearCanvas();
+      };
+      ws.onclose = () => setTimeout(connect, 3000);
+    }
+
+    async function renderAvatar(data) {
+      ctx.clearRect(0, 0, 1080, 1080);
+      if (!data.items || data.items.length === 0) return;
+
+      const sorted = data.items.sort((a, b) => a.layer_order - b.layer_order);
+      for (const item of sorted) {
+        await drawLayer(item.image_url);
+      }
+    }
+
+    function drawLayer(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, 1080, 1080);
+          resolve();
+        };
+        img.onerror = resolve;
+        img.src = src;
+      });
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, 1080, 1080);
+    }
+
+    connect();
+  </script>
+</body>
+</html>

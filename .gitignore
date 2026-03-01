@@ -1,0 +1,6 @@
+node_modules/
+.env
+uploads/
+public/assets/cosmetics/*
+!public/assets/cosmetics/.gitkeep
+*.log

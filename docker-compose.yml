@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: stream-avatars-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${DB_USER:-avatars}:${DB_PASS:-avatars_secret}@db:5432/${DB_NAME:-stream_avatars}
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID}
+      - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET}
+      - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
+      - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
+      - BASE_URL=${BASE_URL:-http://localhost:3000}
+      - API_SECRET=${API_SECRET:-your-api-secret-key}
+      - ADMIN_TWITCH_IDS=${ADMIN_TWITCH_IDS:-}
+    volumes:
+      - ./public/assets/cosmetics:/app/public/assets/cosmetics
+      - avatar_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    container_name: stream-avatars-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USER:-avatars}
+      - POSTGRES_PASSWORD=${DB_PASS:-avatars_secret}
+      - POSTGRES_DB=${DB_NAME:-stream_avatars}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-avatars} -d ${DB_NAME:-stream_avatars}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stream-avatars-redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  avatar_uploads:
