@@ -5,12 +5,12 @@ const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../../middleware/auth');
 const { db, redis } = require('../../config/database');
-const PointsService = require('../../services/points');
+const pointsService = require('../../services/points');
 const inventoryService = require('../../services/inventory');
 const websocketService = require('../../services/websocket');
+const errorLogger = require('../../services/errorLogger');
 
 const router = express.Router();
-const pointsService = new PointsService();
 
 // ── File Upload Config ──
 const storage = multer.diskStorage({
@@ -76,8 +76,8 @@ router.post('/items', requireAdmin, upload.single('image'), async (req, res) => 
 
     res.json({ success: true, item });
   } catch (err) {
-    console.error('Create item error:', err);
-    res.status(500).json({ error: 'Failed to create item' });
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.items.create' });
+    res.status(500).json({ error: 'Failed to create item', error_id: errorId });
   }
 });
 
@@ -267,8 +267,8 @@ router.delete('/items/:itemId/owners/:userId', requireAdmin, async (req, res) =>
     );
     res.json({ success: true });
   } catch (err) {
-    console.error('Revoke item error:', err);
-    res.status(500).json({ error: 'Failed to revoke item' });
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.items.revoke' });
+    res.status(500).json({ error: 'Failed to revoke item', error_id: errorId });
   }
 });
 
@@ -289,6 +289,53 @@ router.put('/items/:itemId/reactivate', requireAdmin, async (req, res) => {
     WHERE id = $2 RETURNING *
   `, [available_until || null, req.params.itemId]);
   res.json({ success: true, item });
+});
+
+// ── Error Log Management ──
+
+router.get('/errors', requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const resolved = req.query.resolved !== undefined ? req.query.resolved === 'true' : undefined;
+    const severity = req.query.severity || undefined;
+
+    const errors = await errorLogger.getErrors({ limit, offset, resolved, severity });
+    res.json(errors);
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.errors.list' });
+    res.status(500).json({ error: 'Failed to fetch errors', error_id: errorId });
+  }
+});
+
+router.get('/errors/stats', requireAdmin, async (req, res) => {
+  try {
+    const stats = await errorLogger.getErrorStats();
+    res.json(stats);
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.errors.stats' });
+    res.status(500).json({ error: 'Failed to fetch error stats', error_id: errorId });
+  }
+});
+
+router.put('/errors/:errorId/resolve', requireAdmin, async (req, res) => {
+  try {
+    const result = await errorLogger.resolveError(req.params.errorId);
+    res.json(result);
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.errors.resolve' });
+    res.status(500).json({ error: 'Failed to resolve error', error_id: errorId });
+  }
+});
+
+router.delete('/errors/resolved', requireAdmin, async (req, res) => {
+  try {
+    const result = await errorLogger.clearResolved();
+    res.json(result);
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.errors.clear' });
+    res.status(500).json({ error: 'Failed to clear errors', error_id: errorId });
+  }
 });
 
 module.exports = router;

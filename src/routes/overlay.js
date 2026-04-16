@@ -5,6 +5,7 @@ const inventoryService = require('../services/inventory');
 const websocketService = require('../services/websocket');
 
 const router = express.Router();
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // Serve the single overlay page
 router.get('/', (req, res) => {
@@ -12,7 +13,7 @@ router.get('/', (req, res) => {
 });
 
 // API: trigger avatar display (called by Streamer.bot)
-router.post('/trigger', async (req, res) => {
+router.post('/trigger', asyncHandler(async (req, res) => {
   const apiKey = req.headers['x-api-key'] || req.body.api_key;
   if (apiKey !== process.env.API_SECRET) {
     return res.status(401).json({ error: 'Invalid API key' });
@@ -59,10 +60,10 @@ router.post('/trigger', async (req, res) => {
 
   websocketService.broadcast('overlay', 'show_avatar', payload);
   res.json({ success: true, display_name: user.display_name, item_count: equipped.length });
-});
+}));
 
 // API: hide avatar (optional, for manual clear)
-router.post('/hide', async (req, res) => {
+router.post('/hide', asyncHandler(async (req, res) => {
   const apiKey = req.headers['x-api-key'] || req.body.api_key;
   if (apiKey !== process.env.API_SECRET) {
     return res.status(401).json({ error: 'Invalid API key' });
@@ -70,10 +71,10 @@ router.post('/hide', async (req, res) => {
 
   websocketService.broadcast('overlay', 'hide_avatar', {});
   res.json({ success: true });
-});
+}));
 
 // Avatar data endpoint (for direct lookups)
-router.get('/avatar/:identifier', async (req, res) => {
+router.get('/avatar/:identifier', asyncHandler(async (req, res) => {
   const { identifier } = req.params;
   const { platform } = req.query;
 
@@ -119,6 +120,6 @@ router.get('/avatar/:identifier', async (req, res) => {
       image_url: `/assets/cosmetics/${item.image_filename}`,
     })),
   });
-});
+}));
 
 module.exports = router;

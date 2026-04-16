@@ -9,10 +9,10 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
 const http = require('http');
-const fs = require('fs');
 
 const { pool, redis } = require('./config/database');
 const websocketService = require('./services/websocket');
+const migrate = require('./db/migrate');
 
 const app = express();
 const server = http.createServer(app);
@@ -81,47 +81,25 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// ── Global error handler ──
+// Must be after all routes. Express identifies error middleware by the 4-param signature.
+const errorLogger = require('./services/errorLogger');
+
+app.use(async (err, req, res, next) => {
+  const errorId = await errorLogger.logError(err, {
+    req,
+    source: 'express_global',
+    severity: 'error',
+  });
+
+  res.status(err.status || 500).json({
+    error: 'Internal server error',
+    error_id: errorId,
+  });
+});
+
 // ── Initialize WebSocket ──
 websocketService.init(server);
-
-// ── Run migrations on startup ──
-async function runMigrations() {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS _migrations (
-        id SERIAL PRIMARY KEY,
-        filename VARCHAR(255) NOT NULL UNIQUE,
-        executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      )
-    `);
-
-    const { rows: executed } = await client.query('SELECT filename FROM _migrations ORDER BY id');
-    const executedFiles = new Set(executed.map(r => r.filename));
-
-    const migrationsDir = path.join(__dirname, 'db/migrations');
-    const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
-
-    for (const file of files) {
-      if (executedFiles.has(file)) continue;
-      console.log(`🔄 Running migration: ${file}`);
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-      await client.query('BEGIN');
-      try {
-        await client.query(sql);
-        await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
-        await client.query('COMMIT');
-        console.log(`✅ ${file}`);
-      } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(`❌ Migration failed: ${file}`, err.message);
-        throw err;
-      }
-    }
-  } finally {
-    client.release();
-  }
-}
 
 // ── Start ──
 const PORT = process.env.PORT || 3000;
@@ -129,7 +107,7 @@ const PORT = process.env.PORT || 3000;
 async function start() {
   try {
     await redis.connect().catch(() => console.log('Redis connecting...'));
-    await runMigrations();
+    await migrate(pool);
     server.listen(PORT, () => {
       console.log(`
 ╔══════════════════════════════════════════════╗
@@ -154,7 +132,7 @@ async function start() {
             RETURNING id, name, available_until
           `);
           if (result.rowCount > 0) {
-            console.log(`⏰ Expired ${result.rowCount} limited-time item(s):`,
+            console.log(`Expired ${result.rowCount} limited-time item(s):`,
               result.rows.map(r => r.name).join(', '));
           }
         } catch (err) {

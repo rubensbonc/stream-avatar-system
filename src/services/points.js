@@ -79,27 +79,28 @@ class PointsService {
   async awardPoints(userId, amount, reason, platform, metadata = {}) {
     if (amount <= 0) return { success: false, balance: 0 };
 
-    // Check for multiplier
     const multiplier = await this.getMultiplier();
     const finalAmount = Math.floor(amount * multiplier);
 
-    const result = await db.getOne(`
-      UPDATE users
-      SET points_balance = points_balance + $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING points_balance
-    `, [finalAmount, userId]);
+    const result = await db.transaction(async (client) => {
+      const { rows: [updated] } = await client.query(`
+        UPDATE users
+        SET points_balance = points_balance + $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING points_balance
+      `, [finalAmount, userId]);
+
+      if (!updated) return null;
+
+      await client.query(`
+        INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [userId, finalAmount, reason, platform, JSON.stringify(metadata)]);
+
+      return updated;
+    });
 
     if (!result) return { success: false, balance: 0 };
-
-    // Log transaction
-    await db.query(`
-      INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [userId, finalAmount, reason, platform, JSON.stringify(metadata)]);
-
-    // Invalidate cache
-    await redis.del(`user:${userId}:points`).catch(() => {});
 
     return { success: true, balance: result.points_balance, awarded: finalAmount };
   }
@@ -110,21 +111,25 @@ class PointsService {
   async spendPoints(userId, amount, reason, metadata = {}) {
     if (amount <= 0) return { success: false, error: 'Invalid amount' };
 
-    const result = await db.getOne(`
-      UPDATE users
-      SET points_balance = points_balance - $1, updated_at = NOW()
-      WHERE id = $2 AND points_balance >= $1
-      RETURNING points_balance
-    `, [amount, userId]);
+    const result = await db.transaction(async (client) => {
+      const { rows: [updated] } = await client.query(`
+        UPDATE users
+        SET points_balance = points_balance - $1, updated_at = NOW()
+        WHERE id = $2 AND points_balance >= $1
+        RETURNING points_balance
+      `, [amount, userId]);
+
+      if (!updated) return null;
+
+      await client.query(`
+        INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
+        VALUES ($1, $2, $3, 'system', $4)
+      `, [userId, -amount, reason, JSON.stringify(metadata)]);
+
+      return updated;
+    });
 
     if (!result) return { success: false, error: 'Insufficient points' };
-
-    await db.query(`
-      INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
-      VALUES ($1, $2, $3, 'system', $4)
-    `, [userId, -amount, reason, JSON.stringify(metadata)]);
-
-    await redis.del(`user:${userId}:points`).catch(() => {});
 
     return { success: true, balance: result.points_balance };
   }
@@ -143,7 +148,7 @@ class PointsService {
     const isDouble = doubleSetting?.value === true || doubleSetting?.value === 'true';
 
     const finalMultiplier = isDouble ? multiplier * 2 : multiplier;
-    await redis.set('economy:multiplier', finalMultiplier, 'EX', 60).catch(() => {});
+    await redis.set('economy:multiplier', finalMultiplier, 'EX', 60).catch(err => console.error('Redis error:', err.message));
     return finalMultiplier;
   }
 
@@ -152,34 +157,53 @@ class PointsService {
    */
   async creditWatchTime(userId, minutes) {
     const user = await db.getOne('SELECT * FROM users WHERE id = $1', [userId]);
-    if (!user) return;
+    if (!user) return 1;
 
     const today = new Date().toISOString().split('T')[0];
-    let streakBonus = 1;
+    let newStreakDays = user.streak_days;
 
     if (user.last_stream_date) {
-      const lastDate = new Date(user.last_stream_date);
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
+      const lastDateStr = new Date(user.last_stream_date).toISOString().split('T')[0];
 
-      if (lastDate.toISOString().split('T')[0] === yesterday.toISOString().split('T')[0]) {
-        // Consecutive day — increment streak
-        await db.query(`
-          UPDATE users SET streak_days = streak_days + 1, last_stream_date = $1 WHERE id = $2 AND last_stream_date != $1
-        `, [today, userId]);
-        streakBonus = 1 + Math.min(user.streak_days * 0.1, 1); // up to 2x at 10-day streak
-      } else if (lastDate.toISOString().split('T')[0] !== today) {
-        // Streak broken
-        await db.query('UPDATE users SET streak_days = 1, last_stream_date = $1 WHERE id = $2', [today, userId]);
+      if (lastDateStr === today) {
+        // Same day -- no streak change
+      } else {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (lastDateStr === yesterdayStr) {
+          // Consecutive day -- increment streak
+          newStreakDays = user.streak_days + 1;
+          await db.query(
+            'UPDATE users SET streak_days = $1, last_stream_date = $2 WHERE id = $3 AND last_stream_date != $2',
+            [newStreakDays, today, userId]
+          );
+        } else {
+          // Streak broken
+          newStreakDays = 1;
+          await db.query(
+            'UPDATE users SET streak_days = 1, last_stream_date = $1 WHERE id = $2',
+            [today, userId]
+          );
+        }
       }
     } else {
-      await db.query('UPDATE users SET streak_days = 1, last_stream_date = $1 WHERE id = $2', [today, userId]);
+      // First ever watch
+      newStreakDays = 1;
+      await db.query(
+        'UPDATE users SET streak_days = 1, last_stream_date = $1 WHERE id = $2',
+        [today, userId]
+      );
     }
 
-    await db.query(`
-      UPDATE users SET watch_time_minutes = watch_time_minutes + $1, last_seen_at = NOW() WHERE id = $2
-    `, [minutes, userId]);
+    await db.query(
+      'UPDATE users SET watch_time_minutes = watch_time_minutes + $1, last_seen_at = NOW() WHERE id = $2',
+      [minutes, userId]
+    );
 
+    // Bonus computed from NEW streak value: day 1 = 1x, day 2 = 1.1x, ... day 11+ = 2x
+    const streakBonus = 1 + Math.min((newStreakDays - 1) * 0.1, 1);
     return streakBonus;
   }
 
@@ -188,18 +212,19 @@ class PointsService {
    */
   async dailySpin(userId) {
     const cacheKey = `daily_spin:${userId}:${new Date().toISOString().split('T')[0]}`;
-    const already = await redis.get(cacheKey).catch(() => null);
-    if (already) return { success: false, error: 'Already spun today' };
+
+    // Atomic set-if-not-exists to prevent double-spin
+    const setResult = await redis.set(cacheKey, '1', 'EX', 86400, 'NX').catch(() => null);
+    if (!setResult) return { success: false, error: 'Already spun today' };
 
     const setting = await db.getOne("SELECT value FROM economy_settings WHERE key = 'daily_spin_rewards'");
     const rewards = setting ? JSON.parse(JSON.stringify(setting.value)) : [10, 25, 50, 100, 250, 500];
     const reward = rewards[Math.floor(Math.random() * rewards.length)];
 
     const result = await this.awardPoints(userId, reward, 'daily_spin', 'system');
-    await redis.set(cacheKey, '1', 'EX', 86400).catch(() => {});
 
     return { success: true, reward, balance: result.balance };
   }
 }
 
-module.exports = PointsService;
+module.exports = new PointsService();

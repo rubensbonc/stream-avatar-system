@@ -3,12 +3,13 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-const pool = new Pool({
+const localPool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
-async function migrate() {
-  const client = await pool.connect();
+async function migrate(externalPool) {
+  const p = externalPool || localPool;
+  const client = await p.connect();
   try {
     // Create migrations tracking table
     await client.query(`
@@ -31,11 +32,11 @@ async function migrate() {
 
     for (const file of files) {
       if (executedFiles.has(file)) {
-        console.log(`⏭  Skipping ${file} (already executed)`);
+        console.log(`Skipping ${file} (already executed)`);
         continue;
       }
 
-      console.log(`🔄 Running migration: ${file}`);
+      console.log(`Running migration: ${file}`);
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
 
       await client.query('BEGIN');
@@ -43,22 +44,26 @@ async function migrate() {
         await client.query(sql);
         await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
         await client.query('COMMIT');
-        console.log(`✅ Completed: ${file}`);
+        console.log(`Completed: ${file}`);
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`❌ Failed: ${file}`, err.message);
+        console.error(`Failed: ${file}`, err.message);
         throw err;
       }
     }
 
-    console.log('\n🎉 All migrations complete!');
+    console.log('All migrations complete.');
   } finally {
     client.release();
-    await pool.end();
+    if (!externalPool) await localPool.end();
   }
 }
 
-migrate().catch(err => {
-  console.error('Migration failed:', err);
-  process.exit(1);
-});
+module.exports = migrate;
+
+if (require.main === module) {
+  migrate().catch(err => {
+    console.error('Migration failed:', err);
+    process.exit(1);
+  });
+}

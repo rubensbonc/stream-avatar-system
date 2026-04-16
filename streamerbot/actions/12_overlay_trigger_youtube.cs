@@ -22,7 +22,8 @@ public class CPHInline
             {
                 client.DefaultRequestHeaders.Add("x-api-key", apiKey);
 
-                string json = "{\"username\":\"" + username + "\",\"platform\":\"youtube\"}";
+                string safeUsername = username.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+                string json = "{\"username\":\"" + safeUsername + "\",\"platform\":\"youtube\"}";
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = client.PostAsync($"{apiUrl}/overlay/trigger", content).Result;

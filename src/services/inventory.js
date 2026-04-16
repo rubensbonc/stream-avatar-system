@@ -1,6 +1,5 @@
 const { db, redis } = require('../config/database');
-const PointsService = require('./points');
-const pointsService = new PointsService();
+const pointsService = require('./points');
 
 class InventoryService {
   /**
@@ -52,63 +51,77 @@ class InventoryService {
    * Purchase an item from the shop.
    */
   async purchaseItem(userId, itemId) {
-    // Check if already owned
-    const owned = await db.getOne(
-      'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-      [userId, itemId]
-    );
-    if (owned) return { success: false, error: 'Already owned' };
+    const result = await db.transaction(async (client) => {
+      // Check if already owned
+      const { rows: [owned] } = await client.query(
+        'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+        [userId, itemId]
+      );
+      if (owned) return { success: false, error: 'Already owned' };
 
-    // Get item details
-    const item = await db.getOne('SELECT * FROM items WHERE id = $1 AND is_active = TRUE', [itemId]);
-    if (!item) return { success: false, error: 'Item not found' };
+      // Get item details
+      const { rows: [item] } = await client.query(
+        'SELECT * FROM items WHERE id = $1 AND is_active = TRUE', [itemId]
+      );
+      if (!item) return { success: false, error: 'Item not found' };
 
-    // Check availability window
-    const now = new Date();
-    if (item.available_from && new Date(item.available_from) > now) {
-      return { success: false, error: 'Item not yet available' };
-    }
-    if (item.available_until && new Date(item.available_until) < now) {
-      return { success: false, error: 'Item no longer available' };
-    }
+      // Check availability window
+      const now = new Date();
+      if (item.available_from && new Date(item.available_from) > now) {
+        return { success: false, error: 'Item not yet available' };
+      }
+      if (item.available_until && new Date(item.available_until) < now) {
+        return { success: false, error: 'Item no longer available' };
+      }
 
-    // Check unlock requirements
-    const user = await db.getOne('SELECT * FROM users WHERE id = $1', [userId]);
+      // Check unlock requirements
+      const { rows: [user] } = await client.query(
+        'SELECT * FROM users WHERE id = $1', [userId]
+      );
 
-    switch (item.unlock_type) {
-      case 'points':
-        const spend = await pointsService.spendPoints(userId, item.unlock_cost, 'purchase', { item_id: itemId, item_name: item.name });
-        if (!spend.success) return { success: false, error: spend.error };
-        break;
+      switch (item.unlock_type) {
+        case 'points':
+          const { rows: [spendResult] } = await client.query(
+            `UPDATE users SET points_balance = points_balance - $1, updated_at = NOW()
+             WHERE id = $2 AND points_balance >= $1
+             RETURNING points_balance`,
+            [item.unlock_cost, userId]
+          );
+          if (!spendResult) return { success: false, error: 'Insufficient points' };
 
-      case 'watch_time':
-        if (user.watch_time_minutes < (item.unlock_threshold || 0)) {
-          return { success: false, error: `Requires ${item.unlock_threshold} minutes watch time` };
-        }
-        break;
+          await client.query(
+            `INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
+             VALUES ($1, $2, $3, 'system', $4)`,
+            [userId, -item.unlock_cost, 'purchase', JSON.stringify({ item_id: itemId, item_name: item.name })]
+          );
+          break;
 
-      case 'sub_only':
-        // This would be checked against their linked accounts / sub status
-        // For now, trust the frontend or add sub verification
-        break;
+        case 'watch_time':
+          if (user.watch_time_minutes < (item.unlock_threshold || 0)) {
+            return { success: false, error: `Requires ${item.unlock_threshold} minutes watch time` };
+          }
+          break;
 
-      case 'free':
-        break;
+        case 'sub_only':
+          break;
 
-      default:
-        return { success: false, error: 'Unknown unlock type' };
-    }
+        case 'free':
+          break;
 
-    // Add to inventory
-    await db.query(
-      'INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)',
-      [userId, itemId]
-    );
+        default:
+          return { success: false, error: 'Unknown unlock type' };
+      }
 
-    // Clear cache
-    await redis.del(`avatar:${userId}`).catch(() => {});
+      // Add to inventory
+      await client.query(
+        'INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)',
+        [userId, itemId]
+      );
 
-    return { success: true, item };
+      return { success: true, item };
+    });
+
+    return result;
   }
 
   /**
@@ -143,9 +156,6 @@ class InventoryService {
       'UPDATE user_inventory SET equipped = $1 WHERE user_id = $2 AND item_id = $3',
       [equip, userId, itemId]
     );
-
-    // Clear cache
-    await redis.del(`avatar:${userId}`).catch(() => {});
 
     return { success: true };
   }

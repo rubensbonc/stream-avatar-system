@@ -1,4 +1,14 @@
 const app = {
+  escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  },
+
   user: null,
   shopItems: [],
   inventory: [],
@@ -159,10 +169,10 @@ const app = {
       .sort((a, b) => a.layer_order - b.layer_order)
       .map(item => `
         <div class="equipped-slot">
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${item.name}">
+          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
           <div>
-            <div class="slot-label">${item.layer_type.replace('_', ' ')}</div>
-            <div class="item-name">${item.name}</div>
+            <div class="slot-label">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
+            <div class="item-name">${this.escapeHtml(item.name)}</div>
           </div>
           <button class="btn btn-sm btn-secondary" onclick="app.unequip('${item.id}')">✕</button>
         </div>
@@ -189,11 +199,11 @@ const app = {
 
       return `
         <div class="item-card ${isOwned ? 'owned' : ''} ${isEquipped ? 'equipped' : ''}">
-          <span class="rarity-badge rarity-${item.rarity}">${item.rarity}</span>
+          <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
           ${limitedBadge}
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${item.name}">
-          <div class="item-name">${item.name}</div>
-          <div class="item-layer">${item.layer_type.replace('_', ' ')}</div>
+          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
+          <div class="item-name">${this.escapeHtml(item.name)}</div>
+          <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
           <div class="item-cost">${costLabel}</div>
           <div class="item-actions">
             ${isOwned
@@ -261,8 +271,8 @@ const app = {
     const adminSelect = document.getElementById('adminLayerSelect');
 
     this.layers.forEach(layer => {
-      shopSelect.innerHTML += `<option value="${layer.type}">${layer.label}</option>`;
-      if (adminSelect) adminSelect.innerHTML += `<option value="${layer.type}">${layer.label}</option>`;
+      shopSelect.innerHTML += `<option value="${this.escapeHtml(layer.type)}">${this.escapeHtml(layer.label)}</option>`;
+      if (adminSelect) adminSelect.innerHTML += `<option value="${this.escapeHtml(layer.type)}">${this.escapeHtml(layer.label)}</option>`;
     });
   },
 
@@ -284,10 +294,10 @@ const app = {
       const isEquipped = item.equipped;
       return `
         <div class="item-card ${isEquipped ? 'equipped' : ''}">
-          <span class="rarity-badge rarity-${item.rarity}">${item.rarity}</span>
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${item.name}">
-          <div class="item-name">${item.name}</div>
-          <div class="item-layer">${item.layer_type.replace('_', ' ')}</div>
+          <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
+          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
+          <div class="item-name">${this.escapeHtml(item.name)}</div>
+          <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
           <div class="item-actions">
             ${isEquipped
               ? '<button class="btn btn-sm btn-secondary" onclick="app.unequip(\'' + item.id + '\')">Unequip</button>'
@@ -377,7 +387,7 @@ const app = {
       container.innerHTML = leaders.map((u, i) => `
         <div class="leaderboard-row">
           <span class="leaderboard-rank ${i < 3 ? 'top-' + (i + 1) : ''}">#${i + 1}</span>
-          <span class="leaderboard-name">${u.display_name}</span>
+          <span class="leaderboard-name">${this.escapeHtml(u.display_name)}</span>
           <span class="leaderboard-value">${(u[field] || 0).toLocaleString()}${suffix}</span>
         </div>
       `).join('');
@@ -414,8 +424,8 @@ const app = {
           <div class="equipped-slot mt-1 linked-account">
             <span>${a.platform === 'twitch' ? '💜' : a.platform === 'youtube' ? '🔴' : '🔷'}</span>
             <div>
-              <div class="slot-label">${a.platform.charAt(0).toUpperCase() + a.platform.slice(1)}</div>
-              <div class="item-name">${a.username || 'Connected'}</div>
+              <div class="slot-label">${this.escapeHtml(a.platform.charAt(0).toUpperCase() + a.platform.slice(1))}</div>
+              <div class="item-name">${this.escapeHtml(a.username || 'Connected')}</div>
             </div>
             <span class="link-status">✓</span>
           </div>
@@ -514,11 +524,11 @@ const app = {
         }
         return `
         <div class="item-card" style="border-color: ${item.is_active ? 'var(--border)' : 'var(--danger)'}">
-          <span class="rarity-badge rarity-${item.rarity}">${item.rarity}</span>
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${item.name}" onerror="this.style.display='none'">
-          <div class="item-name">${item.name}</div>
-          <div class="item-layer">${item.layer_type.replace('_', ' ')}</div>
-          <div class="item-cost">${item.unlock_type}: ${item.unlock_cost || 'free'}</div>
+          <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
+          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}" onerror="this.style.display='none'">
+          <div class="item-name">${this.escapeHtml(item.name)}</div>
+          <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
+          <div class="item-cost">${this.escapeHtml(item.unlock_type)}: ${item.unlock_cost || 'free'}</div>
           ${limitedInfo}
           ${!item.is_active ? '<div style="color:var(--danger);font-size:0.8rem">DISABLED</div>' : ''}
           <button class="btn btn-sm btn-primary mt-1" onclick="app.openItemDetail('${item.id}')">Manage</button>
@@ -527,6 +537,10 @@ const app = {
     } catch (err) {
       console.error('Admin items failed:', err);
     }
+
+    // Error log
+    await this.loadErrorStats();
+    await this.loadErrors();
   },
 
   // ── Item Detail Modal ──
@@ -558,14 +572,14 @@ const app = {
     // Info
     const isExpired = item.is_limited && item.available_until && new Date(item.available_until) < new Date();
     document.getElementById('itemDetailInfo').innerHTML = `
-      <h2>${item.name}</h2>
-      <span class="rarity-badge rarity-${item.rarity}" style="position:static">${item.rarity}</span>
+      <h2>${this.escapeHtml(item.name)}</h2>
+      <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}" style="position:static">${this.escapeHtml(item.rarity)}</span>
       <span class="status-badge ${item.is_active ? 'status-active' : 'status-disabled'}">${item.is_active ? 'Active' : 'Disabled'}</span>
       ${item.is_limited ? `<span class="status-badge ${isExpired ? 'status-expired' : 'status-limited'}">
         ${isExpired ? 'Expired' : 'Limited Time'}
       </span>` : ''}
-      <p class="text-muted mt-1">${item.layer_type.replace('_', ' ')} · ${item.unlock_type}: ${item.unlock_cost || 'free'}</p>
-      ${item.description ? `<p class="text-muted">${item.description}</p>` : ''}
+      <p class="text-muted mt-1">${this.escapeHtml(item.layer_type.replace('_', ' '))} · ${this.escapeHtml(item.unlock_type)}: ${item.unlock_cost || 'free'}</p>
+      ${item.description ? `<p class="text-muted">${this.escapeHtml(item.description)}</p>` : ''}
       ${item.available_until ? `<p class="text-muted">Available until: ${new Date(item.available_until).toLocaleString()}</p>` : ''}
     `;
 
@@ -588,10 +602,10 @@ const app = {
       : owners.map(o => `
         <div class="owner-row">
           <div class="owner-info">
-            <span class="owner-name">${o.display_name}</span>
+            <span class="owner-name">${this.escapeHtml(o.display_name)}</span>
             <span class="text-muted">${o.equipped ? '✓ Equipped' : ''} · Got ${new Date(o.acquired_at).toLocaleDateString()}</span>
           </div>
-          <button class="btn btn-sm btn-danger" onclick="app.revokeItem('${itemId}', '${o.id}', '${o.display_name.replace(/'/g, "\\'")}')">Revoke</button>
+          <button class="btn btn-sm btn-danger" onclick="app.revokeItem('${itemId}', '${o.id}', '${this.escapeHtml(o.display_name.replace(/'/g, "\\'"))}')">Revoke</button>
         </div>
       `).join('');
   },
@@ -637,8 +651,8 @@ const app = {
     const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query)}`);
     const users = await res.json();
     container.innerHTML = users.map(u => `
-      <div class="search-result-row" onclick="app.grantItemToUser('${u.id}', '${u.display_name.replace(/'/g, "\\'")}')">
-        <span>${u.display_name}</span>
+      <div class="search-result-row" onclick="app.grantItemToUser('${u.id}', '${this.escapeHtml(u.display_name.replace(/'/g, "\\'"))}')">
+        <span>${this.escapeHtml(u.display_name)}</span>
         <span class="text-muted">✦ ${u.points_balance.toLocaleString()}</span>
       </div>
     `).join('') || '<div class="search-result-row text-muted">No users found</div>';
@@ -735,6 +749,110 @@ const app = {
   toggleUnlockFields() {
     const type = document.getElementById('unlockTypeSelect').value;
     document.getElementById('thresholdGroup').style.display = type === 'watch_time' ? '' : 'none';
+  },
+
+  // ── Error Log ──
+  _errorOffset: 0,
+  _errorLimit: 20,
+
+  async loadErrorStats() {
+    try {
+      const res = await fetch('/api/admin/errors/stats');
+      const stats = await res.json();
+      document.getElementById('errorStats').innerHTML = `
+        <div class="stat-card"><div class="stat-value">${stats.total}</div><div class="stat-label">Total Errors</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--danger)">${stats.unresolved}</div><div class="stat-label">Unresolved</div></div>
+        <div class="stat-card"><div class="stat-value">${stats.last_24h}</div><div class="stat-label">Last 24h</div></div>
+        <div class="stat-card"><div class="stat-value">${stats.by_severity?.error || 0}</div><div class="stat-label">Errors</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--warning)">${stats.by_severity?.warn || 0}</div><div class="stat-label">Warnings</div></div>
+      `;
+    } catch (err) {
+      console.error('Error stats failed:', err);
+    }
+  },
+
+  async loadErrors() {
+    try {
+      const severity = document.getElementById('errorSeverityFilter').value;
+      const resolved = document.getElementById('errorResolvedFilter').value;
+
+      let url = `/api/admin/errors?limit=${this._errorLimit}&offset=${this._errorOffset}`;
+      if (severity) url += `&severity=${severity}`;
+      if (resolved !== '') url += `&resolved=${resolved}`;
+
+      const res = await fetch(url);
+      const errors = await res.json();
+      const container = document.getElementById('errorList');
+
+      if (errors.length === 0) {
+        container.innerHTML = '<p class="text-muted">No errors found.</p>';
+        document.getElementById('errorPagination').innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = errors.map(err => `
+        <div class="error-row ${err.resolved ? 'error-resolved' : ''}" onclick="app.toggleErrorDetail(this)">
+          <div class="error-row-summary">
+            <span class="severity-badge severity-${this.escapeHtml(err.severity)}">${this.escapeHtml(err.severity)}</span>
+            <span class="error-id-label">${this.escapeHtml(err.error_id)}</span>
+            <span class="error-source">${this.escapeHtml(err.source || 'unknown')}</span>
+            <span class="error-message-preview">${this.escapeHtml((err.message || '').substring(0, 80))}${err.message?.length > 80 ? '...' : ''}</span>
+            ${err.display_name ? '<span class="error-user">' + this.escapeHtml(err.display_name) + '</span>' : ''}
+            <span class="error-time">${new Date(err.created_at).toLocaleString()}</span>
+          </div>
+          <div class="error-row-detail" style="display:none">
+            <div class="error-detail-section">
+              <strong>Full Message:</strong>
+              <p>${this.escapeHtml(err.message)}</p>
+            </div>
+            ${err.method && err.path ? '<div class="error-detail-section"><strong>Request:</strong> <code>' + this.escapeHtml(err.method) + ' ' + this.escapeHtml(err.path) + '</code></div>' : ''}
+            ${err.stack ? '<div class="error-detail-section"><strong>Stack Trace:</strong><pre class="error-stack">' + this.escapeHtml(err.stack) + '</pre></div>' : ''}
+            ${err.metadata ? '<div class="error-detail-section"><strong>Metadata:</strong><pre class="error-stack">' + this.escapeHtml(JSON.stringify(err.metadata, null, 2)) + '</pre></div>' : ''}
+            ${!err.resolved ? '<button class="btn btn-sm btn-success mt-1" onclick="event.stopPropagation(); app.resolveError(\'' + this.escapeHtml(err.error_id) + '\')">Mark Resolved</button>' : '<span class="text-muted">Resolved</span>'}
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('errorPagination').innerHTML = `
+        ${this._errorOffset > 0 ? '<button class="btn btn-sm btn-secondary" onclick="app.errorPage(-1)">Previous</button>' : ''}
+        ${errors.length === this._errorLimit ? '<button class="btn btn-sm btn-secondary" onclick="app.errorPage(1)">Next</button>' : ''}
+      `;
+    } catch (err) {
+      console.error('Error list failed:', err);
+    }
+  },
+
+  toggleErrorDetail(row) {
+    const detail = row.querySelector('.error-row-detail');
+    if (detail) {
+      detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+    }
+  },
+
+  async resolveError(errorId) {
+    const res = await fetch(`/api/admin/errors/${errorId}/resolve`, { method: 'PUT' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast('Error marked as resolved', 'success');
+      await this.loadErrors();
+      await this.loadErrorStats();
+    }
+  },
+
+  async clearResolvedErrors() {
+    if (!confirm('Delete all resolved errors? This cannot be undone.')) return;
+    const res = await fetch('/api/admin/errors/resolved', { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast(`Cleared ${data.deleted} resolved errors`, 'success');
+      await this.loadErrors();
+      await this.loadErrorStats();
+    }
+  },
+
+  errorPage(direction) {
+    this._errorOffset = Math.max(0, this._errorOffset + (direction * this._errorLimit));
+    this.loadErrors();
   },
 
   // ── Navigation ──

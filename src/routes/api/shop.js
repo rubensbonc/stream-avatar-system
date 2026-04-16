@@ -4,9 +4,10 @@ const inventoryService = require('../../services/inventory');
 const { db } = require('../../config/database');
 
 const router = express.Router();
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // Get shop catalog
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const userId = req.session?.userId;
   const items = await inventoryService.getShopItems(userId);
 
@@ -18,33 +19,9 @@ router.get('/', async (req, res) => {
   }
 
   res.json({ items, grouped });
-});
+}));
 
-// Get single item details
-router.get('/:itemId', async (req, res) => {
-  const item = await db.getOne('SELECT * FROM items WHERE id = $1 AND is_active = TRUE', [req.params.itemId]);
-  if (!item) return res.status(404).json({ error: 'Item not found' });
-
-  // Check if current user owns it
-  let owned = false;
-  if (req.session?.userId) {
-    const inv = await db.getOne(
-      'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2',
-      [req.session.userId, req.params.itemId]
-    );
-    owned = !!inv;
-  }
-
-  res.json({ ...item, owned });
-});
-
-// Purchase an item
-router.post('/:itemId/purchase', requireAuth, async (req, res) => {
-  const result = await inventoryService.purchaseItem(req.session.userId, req.params.itemId);
-  res.json(result);
-});
-
-// Get available layer types
+// Get available layer types (must be before /:itemId)
 router.get('/meta/layers', (req, res) => {
   res.json({
     layers: [
@@ -64,5 +41,29 @@ router.get('/meta/layers', (req, res) => {
     unlock_types: ['free', 'points', 'watch_time', 'sub_only', 'donation', 'event'],
   });
 });
+
+// Get single item details
+router.get('/:itemId', asyncHandler(async (req, res) => {
+  const item = await db.getOne('SELECT * FROM items WHERE id = $1 AND is_active = TRUE', [req.params.itemId]);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+
+  // Check if current user owns it
+  let owned = false;
+  if (req.session?.userId) {
+    const inv = await db.getOne(
+      'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+      [req.session.userId, req.params.itemId]
+    );
+    owned = !!inv;
+  }
+
+  res.json({ ...item, owned });
+}));
+
+// Purchase an item
+router.post('/:itemId/purchase', requireAuth, asyncHandler(async (req, res) => {
+  const result = await inventoryService.purchaseItem(req.session.userId, req.params.itemId);
+  res.json(result);
+}));
 
 module.exports = router;

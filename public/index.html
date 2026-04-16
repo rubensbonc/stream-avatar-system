@@ -197,6 +197,28 @@
             <h3>All Items</h3>
             <div id="adminItemsList" class="admin-items-grid"></div>
           </div>
+
+          <!-- Error Log -->
+          <div class="admin-card">
+            <h3>Error Log</h3>
+            <div id="errorStats" class="stats-grid"></div>
+            <div class="error-filters" style="margin: 1rem 0;">
+              <select id="errorSeverityFilter" onchange="app.loadErrors()">
+                <option value="">All Severities</option>
+                <option value="error">Error</option>
+                <option value="warn">Warning</option>
+                <option value="info">Info</option>
+              </select>
+              <select id="errorResolvedFilter" onchange="app.loadErrors()">
+                <option value="false">Unresolved</option>
+                <option value="true">Resolved</option>
+                <option value="">All</option>
+              </select>
+              <button class="btn btn-sm btn-danger" onclick="app.clearResolvedErrors()">Clear Resolved</button>
+            </div>
+            <div id="errorList" class="error-list"></div>
+            <div id="errorPagination" class="error-pagination" style="margin-top: 1rem;"></div>
+          </div>
         </div>
       </div>
 

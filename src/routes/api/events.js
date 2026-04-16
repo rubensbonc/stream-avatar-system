@@ -1,13 +1,13 @@
 const express = require('express');
 const { requireApiKey } = require('../../middleware/auth');
 const identityService = require('../../services/identity');
-const PointsService = require('../../services/points');
+const pointsService = require('../../services/points');
 const inventoryService = require('../../services/inventory');
 const websocketService = require('../../services/websocket');
+const errorLogger = require('../../services/errorLogger');
 const { db, redis } = require('../../config/database');
 
 const router = express.Router();
-const pointsService = new PointsService();
 
 /**
  * POST /api/events
@@ -36,7 +36,7 @@ router.post('/', requireApiKey, async (req, res) => {
       if (onCooldown) {
         return res.json({ status: 'cooldown', points_awarded: 0 });
       }
-      await redis.set(cooldownKey, '1', 'EX', 60).catch(() => {}); // 60s cooldown
+      await redis.set(cooldownKey, '1', 'EX', 60).catch(err => console.error('Redis error:', err.message)); // 60s cooldown
     }
 
     // ── Resolve identity ──
@@ -64,8 +64,10 @@ router.post('/', requireApiKey, async (req, res) => {
 
     if (points > 0) {
       const result = await pointsService.awardPoints(user.id, points, event, platform, data);
-      awarded = result.awarded;
-      newBalance = result.balance;
+      if (result.success) {
+        awarded = result.awarded;
+        newBalance = result.balance;
+      }
     }
 
     // ── Handle watch time ──
@@ -107,8 +109,8 @@ router.post('/', requireApiKey, async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Event processing error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const errorId = await errorLogger.logError(err, { req, source: 'events.post' });
+    res.status(500).json({ error: 'Internal server error', error_id: errorId });
   }
 });
 
@@ -136,9 +138,11 @@ router.post('/batch', requireApiKey, async (req, res) => {
 
     let processed = 0;
     let errors = 0;
+    const CHUNK_SIZE = 10;
 
-    for (const viewer of viewers) {
-      try {
+    for (let i = 0; i < viewers.length; i += CHUNK_SIZE) {
+      const chunk = viewers.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.allSettled(chunk.map(async (viewer) => {
         const user = await identityService.resolveUser(
           platform,
           viewer.platform_user_id,
@@ -157,18 +161,22 @@ router.post('/batch', requireApiKey, async (req, res) => {
         }
 
         await db.query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
-        processed++;
-      } catch (err) {
-        errors++;
-        console.error(`Batch event error for ${viewer.username}:`, err.message);
-      }
+      }));
+
+      results.forEach(r => {
+        if (r.status === 'fulfilled') processed++;
+        else {
+          errors++;
+          console.error('Batch viewer error:', r.reason?.message);
+        }
+      });
     }
 
     res.json({ status: 'ok', processed, errors, total: viewers.length });
 
   } catch (err) {
-    console.error('Batch event error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const errorId = await errorLogger.logError(err, { req, source: 'events.batch' });
+    res.status(500).json({ error: 'Internal server error', error_id: errorId });
   }
 });
 
@@ -176,7 +184,7 @@ router.post('/batch', requireApiKey, async (req, res) => {
  * POST /api/events/streamelements
  * Dedicated endpoint for StreamElements webhooks.
  */
-router.post('/streamelements', async (req, res) => {
+router.post('/streamelements', requireApiKey, async (req, res) => {
   try {
     const event = req.body;
     // SE sends different event structures
@@ -227,8 +235,8 @@ router.post('/streamelements', async (req, res) => {
     res.json({ status: 'ok' });
 
   } catch (err) {
-    console.error('StreamElements webhook error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    const errorId = await errorLogger.logError(err, { req, source: 'events.streamelements' });
+    res.status(500).json({ error: 'Internal server error', error_id: errorId });
   }
 });
 

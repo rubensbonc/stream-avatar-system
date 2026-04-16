@@ -99,6 +99,9 @@ CREATE TABLE IF NOT EXISTS pending_events (
 CREATE INDEX idx_pending_unresolved ON pending_events(resolved) WHERE resolved = FALSE;
 
 -- Active viewer sessions (for watch time tracking)
+-- NOTE: This table is currently unused. Watch time is tracked via periodic
+-- batch webhook calls from Streamer.bot, not via session tracking.
+-- Kept for possible future use.
 CREATE TABLE IF NOT EXISTS viewer_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,

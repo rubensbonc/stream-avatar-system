@@ -139,9 +139,7 @@ class IdentityService {
     `, [platform, platformUserId, platformUsername]);
 
     for (const event of pending) {
-      // Import here to avoid circular dependency
-      const PointsService = require('./points');
-      const pointsService = new PointsService();
+      const pointsService = require('./points');
 
       const points = pointsService.calculatePoints(event.event_type, event.platform, event.event_data);
       if (points > 0) {

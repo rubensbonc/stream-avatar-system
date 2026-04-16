@@ -1,14 +1,15 @@
 const express = require('express');
 const { requireAuth } = require('../../middleware/auth');
 const { db } = require('../../config/database');
-const PointsService = require('../../services/points');
+const pointsService = require('../../services/points');
 const inventoryService = require('../../services/inventory');
+const errorLogger = require('../../services/errorLogger');
 
 const router = express.Router();
-const pointsService = new PointsService();
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // Get current user's profile
-router.get('/me', requireAuth, async (req, res) => {
+router.get('/me', requireAuth, asyncHandler(async (req, res) => {
   const user = await db.getOne(`
     SELECT u.*,
       (SELECT COUNT(*) FROM user_inventory WHERE user_id = u.id) as items_owned,
@@ -22,10 +23,10 @@ router.get('/me', requireAuth, async (req, res) => {
   );
 
   res.json({ ...user, linked_accounts: linkedAccounts });
-});
+}));
 
 // Leaderboard
-router.get('/leaderboard', async (req, res) => {
+router.get('/leaderboard', asyncHandler(async (req, res) => {
   const type = req.query.type || 'points'; // 'points', 'watch_time', 'items'
   const limit = Math.min(parseInt(req.query.limit) || 20, 100);
 
@@ -45,10 +46,10 @@ router.get('/leaderboard', async (req, res) => {
   `, [limit]);
 
   res.json(leaders);
-});
+}));
 
 // Get any user's public profile by internal ID
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', asyncHandler(async (req, res) => {
   const user = await db.getOne(`
     SELECT id, display_name, points_balance, watch_time_minutes, streak_days, created_at,
       (SELECT COUNT(*) FROM user_inventory WHERE user_id = users.id) as items_owned
@@ -57,10 +58,10 @@ router.get('/:userId', async (req, res) => {
 
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
-});
+}));
 
 // Get user points by platform ID (for Streamer.bot chat commands)
-router.get('/platform/:platform/:platformId/points', async (req, res) => {
+router.get('/platform/:platform/:platformId/points', asyncHandler(async (req, res) => {
   const user = await db.getOne(`
     SELECT u.display_name, u.points_balance, u.watch_time_minutes, u.streak_days
     FROM users u
@@ -70,22 +71,22 @@ router.get('/platform/:platform/:platformId/points', async (req, res) => {
 
   if (!user) return res.json({ found: false, points: 0 });
   res.json({ found: true, ...user });
-});
+}));
 
 // Get user's inventory
-router.get('/me/inventory', requireAuth, async (req, res) => {
+router.get('/me/inventory', requireAuth, asyncHandler(async (req, res) => {
   const inventory = await inventoryService.getUserInventory(req.session.userId);
   res.json(inventory);
-});
+}));
 
 // Get user's equipped items (avatar)
-router.get('/me/avatar', requireAuth, async (req, res) => {
+router.get('/me/avatar', requireAuth, asyncHandler(async (req, res) => {
   const equipped = await inventoryService.getEquippedItems(req.session.userId);
   res.json(equipped);
-});
+}));
 
 // Get any user's avatar by platform ID (for overlays)
-router.get('/platform/:platform/:platformId/avatar', async (req, res) => {
+router.get('/platform/:platform/:platformId/avatar', asyncHandler(async (req, res) => {
   const user = await db.getOne(`
     SELECT u.id FROM users u
     JOIN linked_accounts la ON u.id = la.user_id
@@ -96,28 +97,28 @@ router.get('/platform/:platform/:platformId/avatar', async (req, res) => {
 
   const equipped = await inventoryService.getEquippedItems(user.id);
   res.json({ found: true, items: equipped });
-});
+}));
 
 // Equip an item
-router.post('/me/equip/:itemId', requireAuth, async (req, res) => {
+router.post('/me/equip/:itemId', requireAuth, asyncHandler(async (req, res) => {
   const result = await inventoryService.equipItem(req.session.userId, req.params.itemId, true);
   res.json(result);
-});
+}));
 
 // Unequip an item
-router.post('/me/unequip/:itemId', requireAuth, async (req, res) => {
+router.post('/me/unequip/:itemId', requireAuth, asyncHandler(async (req, res) => {
   const result = await inventoryService.equipItem(req.session.userId, req.params.itemId, false);
   res.json(result);
-});
+}));
 
 // Daily spin
-router.post('/me/daily-spin', requireAuth, async (req, res) => {
+router.post('/me/daily-spin', requireAuth, asyncHandler(async (req, res) => {
   const result = await pointsService.dailySpin(req.session.userId);
   res.json(result);
-});
+}));
 
 // Point transaction history
-router.get('/me/transactions', requireAuth, async (req, res) => {
+router.get('/me/transactions', requireAuth, asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const offset = parseInt(req.query.offset) || 0;
 
@@ -129,7 +130,7 @@ router.get('/me/transactions', requireAuth, async (req, res) => {
   `, [req.session.userId, limit, offset]);
 
   res.json(transactions);
-});
+}));
 
 // Delete own account
 router.delete('/me', requireAuth, async (req, res) => {
@@ -138,8 +139,8 @@ router.delete('/me', requireAuth, async (req, res) => {
     req.session.destroy();
     res.json({ success: true });
   } catch (err) {
-    console.error('Delete account error:', err);
-    res.status(500).json({ error: 'Failed to delete account' });
+    const errorId = await errorLogger.logError(err, { req, source: 'users.delete' });
+    res.status(500).json({ error: 'Failed to delete account', error_id: errorId });
   }
 });
 
