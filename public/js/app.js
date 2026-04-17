@@ -753,23 +753,32 @@ const app = {
 
   // ── User Management (Admin) ──
   _currentUserId: null,
-  _userSearchTimer: null,
 
   async searchUsersForMgmt(query) {
-    clearTimeout(this._userSearchTimer);
     const container = document.getElementById('userMgmtResults');
     if (query.length < 2) { container.innerHTML = ''; return; }
 
-    this._userSearchTimer = setTimeout(async () => {
+    try {
       const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) {
+        container.innerHTML = `<div class="search-result-row text-muted">Error: ${res.status}</div>`;
+        return;
+      }
       const users = await res.json();
+      if (!Array.isArray(users)) {
+        container.innerHTML = `<div class="search-result-row text-muted">${this.escapeHtml(users.error || 'Invalid response')}</div>`;
+        return;
+      }
       container.innerHTML = users.map(u => `
         <div class="search-result-row" onclick="app.openUserDetail('${u.id}')">
           <span>${this.escapeHtml(u.display_name)}</span>
           <span class="text-muted">✦ ${u.points_balance.toLocaleString()}</span>
         </div>
       `).join('') || '<div class="search-result-row text-muted">No users found</div>';
-    }, 250);
+    } catch (err) {
+      console.error('User search failed:', err);
+      container.innerHTML = '<div class="search-result-row text-muted">Search failed</div>';
+    }
   },
 
   async openUserDetail(userId) {
