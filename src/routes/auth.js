@@ -3,6 +3,7 @@ const passport = require('passport');
 const TwitchStrategy = require('passport-twitch-new').Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const identityService = require('../services/identity');
+const errorLogger = require('../services/errorLogger');
 const { db } = require('../config/database');
 const { requireAuth, getCurrentUser } = require('../middleware/auth');
 
@@ -35,7 +36,8 @@ if (process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET) {
     clientID: process.env.TWITCH_CLIENT_ID,
     clientSecret: process.env.TWITCH_CLIENT_SECRET,
     callbackURL: `${process.env.BASE_URL}/auth/twitch/callback`,
-    scope: 'user_read',
+    scope: 'user:read:email',
+    state: true,
     passReqToCallback: true,
   }, async (req, accessToken, refreshToken, profile, done) => {
     try {
@@ -67,6 +69,7 @@ if (process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET) {
     clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
     callbackURL: `${process.env.BASE_URL}/auth/youtube/callback`,
     scope: ['profile', 'https://www.googleapis.com/auth/youtube.readonly'],
+    state: true,
     passReqToCallback: true,
   }, async (req, accessToken, refreshToken, profile, done) => {
     try {
@@ -120,7 +123,15 @@ router.get('/twitch/callback', (req, res, next) => {
   const linkUserId = req.session.userId;
 
   passport.authenticate('twitch', async (err, user, info) => {
-    if (err || !user) return res.redirect('/?error=auth_failed');
+    if (err || !user) {
+      await errorLogger.logError(err || new Error(info?.message || 'Twitch auth: no user returned'), {
+        req,
+        source: 'auth.twitch.callback',
+        severity: 'warn',
+        metadata: { info },
+      });
+      return res.redirect('/?error=auth_failed');
+    }
 
     if (user._linkProfile && linkMode && linkUserId) {
       // Link flow — don't log in as new user, just link the account
@@ -135,14 +146,18 @@ router.get('/twitch/callback', (req, res, next) => {
         req.session.userId = linkUserId;
         res.redirect('/?linked=twitch');
       } catch (e) {
+        await errorLogger.logError(e, { req, source: 'auth.twitch.link' });
         res.redirect('/?error=link_failed');
       }
       return;
     }
 
     // Normal login flow
-    req.logIn(user, (err) => {
-      if (err) return res.redirect('/?error=auth_failed');
+    req.logIn(user, async (err) => {
+      if (err) {
+        await errorLogger.logError(err, { req, source: 'auth.twitch.login' });
+        return res.redirect('/?error=auth_failed');
+      }
       req.session.userId = user.id;
       res.redirect('/');
     });
@@ -158,7 +173,15 @@ router.get('/youtube/callback', (req, res, next) => {
   const linkUserId = req.session.userId;
 
   passport.authenticate('google', async (err, user, info) => {
-    if (err || !user) return res.redirect('/?error=auth_failed');
+    if (err || !user) {
+      await errorLogger.logError(err || new Error(info?.message || 'YouTube auth: no user returned'), {
+        req,
+        source: 'auth.youtube.callback',
+        severity: 'warn',
+        metadata: { info },
+      });
+      return res.redirect('/?error=auth_failed');
+    }
 
     if (user._linkProfile && linkMode && linkUserId) {
       // Link flow — don't log in as new user, just link the account
@@ -173,14 +196,18 @@ router.get('/youtube/callback', (req, res, next) => {
         req.session.userId = linkUserId;
         res.redirect('/?linked=youtube');
       } catch (e) {
+        await errorLogger.logError(e, { req, source: 'auth.youtube.link' });
         res.redirect('/?error=link_failed');
       }
       return;
     }
 
     // Normal login flow
-    req.logIn(user, (err) => {
-      if (err) return res.redirect('/?error=auth_failed');
+    req.logIn(user, async (err) => {
+      if (err) {
+        await errorLogger.logError(err, { req, source: 'auth.youtube.login' });
+        return res.redirect('/?error=auth_failed');
+      }
       req.session.userId = user.id;
       res.redirect('/');
     });
@@ -247,8 +274,11 @@ router.get('/me', async (req, res) => {
 
 // Logout
 router.post('/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
+  req.session.destroy((err) => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.clearCookie('connect.sid');
+    res.json({ success: true });
+  });
 });
 
 module.exports = router;

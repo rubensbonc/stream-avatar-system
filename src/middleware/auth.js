@@ -34,9 +34,12 @@ async function requireAdmin(req, res, next) {
 async function getCurrentUser(req) {
   if (!req.session?.userId) return null;
   return db.getOne(`
-    SELECT u.*, json_agg(
-      json_build_object('platform', la.platform, 'username', la.platform_username)
-    ) FILTER (WHERE la.id IS NOT NULL) as linked_accounts
+    SELECT u.*, COALESCE(
+      json_agg(
+        json_build_object('platform', la.platform, 'username', la.platform_username)
+      ) FILTER (WHERE la.id IS NOT NULL),
+      '[]'::json
+    ) as linked_accounts
     FROM users u
     LEFT JOIN linked_accounts la ON la.user_id = u.id
     WHERE u.id = $1
