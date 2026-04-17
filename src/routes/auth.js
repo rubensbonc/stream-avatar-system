@@ -115,7 +115,12 @@ if (process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET) {
 // ── Routes ──────────────────────────────────────────
 
 // Twitch login
-router.get('/twitch', passport.authenticate('twitch'));
+router.get('/twitch', (req, res, next) => {
+  // Ensure session is saved before the OAuth redirect so state (CSRF token) persists
+  req.session.save(() => {
+    passport.authenticate('twitch')(req, res, next);
+  });
+});
 
 router.get('/twitch/callback', (req, res, next) => {
   // Capture session values BEFORE passport regenerates the session
@@ -165,7 +170,11 @@ router.get('/twitch/callback', (req, res, next) => {
 });
 
 // YouTube login
-router.get('/youtube', passport.authenticate('google'));
+router.get('/youtube', (req, res, next) => {
+  req.session.save(() => {
+    passport.authenticate('google')(req, res, next);
+  });
+});
 
 router.get('/youtube/callback', (req, res, next) => {
   // Capture session values BEFORE passport regenerates the session

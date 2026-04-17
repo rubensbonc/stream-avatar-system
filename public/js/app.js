@@ -455,6 +455,10 @@ const app = {
       this.toast('Account linking failed. It may already be linked to another user.', 'error');
       window.history.replaceState({}, '', '/');
     }
+    if (error === 'auth_failed') {
+      this.toast('Login failed. Check the admin error log for details.', 'error');
+      window.history.replaceState({}, '', '/');
+    }
   },
 
   async linkStreamElements() {
