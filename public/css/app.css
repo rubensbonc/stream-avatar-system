@@ -923,6 +923,60 @@ nav {
   justify-content: center;
 }
 
+/* ── User Management (Admin) ── */
+.user-mgmt-search {
+  position: relative;
+}
+
+.user-mgmt-search input {
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.9rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.user-mgmt-search input:focus {
+  outline: none;
+  border-color: var(--accent-secondary);
+  box-shadow: 0 0 12px var(--glow-purple);
+}
+
+.user-mgmt-results {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.user-mgmt-results:empty {
+  display: none;
+}
+
+.user-mgmt-results .search-result-row {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.user-mgmt-results .search-result-row:hover {
+  border-color: var(--border-hover);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
 /* ── User Detail Modal ── */
 .user-detail-stats {
   display: grid;
