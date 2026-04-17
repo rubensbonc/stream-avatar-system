@@ -17,6 +17,10 @@ const migrate = require('./db/migrate');
 const app = express();
 const server = http.createServer(app);
 
+// Trust the reverse proxy so req.secure and X-Forwarded-Proto are respected.
+// Required for secure cookies to be set correctly behind an HTTPS-terminating proxy.
+app.set('trust proxy', 1);
+
 // ── Middleware ──
 app.use(helmet({
   contentSecurityPolicy: false, // Allow inline scripts for overlays
