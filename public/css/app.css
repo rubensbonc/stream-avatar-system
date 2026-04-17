@@ -484,6 +484,21 @@ nav {
 .leaderboard-row:hover { background: var(--bg-hover); }
 .leaderboard-row:last-child { border-bottom: none; }
 
+.leaderboard-row.clickable {
+  cursor: pointer;
+  transition: background 0.2s, border-left-color 0.2s;
+  border-left: 2px solid transparent;
+}
+
+.leaderboard-row.clickable:hover {
+  background: rgba(232,54,143,0.08);
+  border-left-color: var(--accent);
+}
+
+.leaderboard-row.clickable:hover .leaderboard-name {
+  color: var(--accent);
+}
+
 .leaderboard-rank {
   width: 2rem;
   font-weight: 700;

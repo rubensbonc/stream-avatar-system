@@ -384,8 +384,9 @@ const app = {
       const field = labels[type];
       const suffix = type === 'watch_time' ? ' min' : type === 'items' ? ' items' : '';
 
+      const isAdmin = this.user?.is_admin;
       container.innerHTML = leaders.map((u, i) => `
-        <div class="leaderboard-row">
+        <div class="leaderboard-row${isAdmin ? ' clickable' : ''}"${isAdmin ? ` onclick="app.openUserDetail('${u.id}')"` : ''}>
           <span class="leaderboard-rank ${i < 3 ? 'top-' + (i + 1) : ''}">#${i + 1}</span>
           <span class="leaderboard-name">${this.escapeHtml(u.display_name)}</span>
           <span class="leaderboard-value">${(u[field] || 0).toLocaleString()}${suffix}</span>
