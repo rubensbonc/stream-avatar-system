@@ -774,12 +774,37 @@ const app = {
         container.innerHTML = `<div class="search-result-row text-muted">${this.escapeHtml(users.error || 'Invalid response')}</div>`;
         return;
       }
-      container.innerHTML = users.map(u => `
-        <div class="search-result-row" onclick="app.openUserDetail('${u.id}')">
-          <span>${this.escapeHtml(u.display_name)}</span>
-          <span class="text-muted">✦ ${u.points_balance.toLocaleString()}</span>
-        </div>
-      `).join('') || '<div class="search-result-row text-muted">No users found</div>';
+      if (users.length === 0) {
+        container.innerHTML = '<div class="search-result-row text-muted">No users found</div>';
+        return;
+      }
+
+      const platformEmoji = { twitch: '💜', youtube: '🔴', streamelements: '🔷' };
+      const lowerQuery = query.toLowerCase();
+
+      container.innerHTML = users.map(u => {
+        // Only show linked accounts that match the query (or all if display_name matched)
+        const displayMatches = u.display_name.toLowerCase().includes(lowerQuery);
+        const accounts = (u.linked_accounts || [])
+          .filter(a => a.username)
+          .filter(a => displayMatches || a.username.toLowerCase().includes(lowerQuery));
+
+        const accountsHtml = accounts.map(a => `
+          <span class="user-suggestion-account">
+            ${platformEmoji[a.platform] || '🔗'} ${this.escapeHtml(a.username)}
+          </span>
+        `).join('');
+
+        return `
+          <div class="search-result-row user-suggestion-row" onclick="app.openUserDetail('${u.id}')">
+            <div class="user-suggestion-main">
+              <span class="user-suggestion-name">${this.escapeHtml(u.display_name)}</span>
+              ${accountsHtml ? `<div class="user-suggestion-accounts">${accountsHtml}</div>` : ''}
+            </div>
+            <span class="text-muted user-suggestion-points">✦ ${u.points_balance.toLocaleString()}</span>
+          </div>
+        `;
+      }).join('');
     } catch (err) {
       console.error('User search failed:', err);
       container.innerHTML = '<div class="search-result-row text-muted">Search failed</div>';

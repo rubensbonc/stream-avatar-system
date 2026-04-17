@@ -216,17 +216,29 @@ router.get('/economy', requireAdmin, async (req, res) => {
 
 // ── Item Detail Management ──
 
-// Search users (for granting items)
+// Search users (for granting items and admin management)
 router.get('/users/search', requireAdmin, async (req, res) => {
   const q = req.query.q;
   if (!q || q.length < 2) return res.json([]);
 
   const users = await db.getMany(`
-    SELECT DISTINCT u.id, u.display_name, u.points_balance
+    SELECT u.id, u.display_name, u.points_balance,
+      COALESCE(
+        json_agg(
+          json_build_object('platform', la.platform, 'username', la.platform_username)
+        ) FILTER (WHERE la.id IS NOT NULL),
+        '[]'::json
+      ) as linked_accounts
     FROM users u
     LEFT JOIN linked_accounts la ON u.id = la.user_id
-    WHERE LOWER(u.display_name) LIKE LOWER($1)
-       OR LOWER(la.platform_username) LIKE LOWER($1)
+    WHERE u.id IN (
+      SELECT DISTINCT u2.id FROM users u2
+      LEFT JOIN linked_accounts la2 ON u2.id = la2.user_id
+      WHERE LOWER(u2.display_name) LIKE LOWER($1)
+         OR LOWER(la2.platform_username) LIKE LOWER($1)
+    )
+    GROUP BY u.id
+    ORDER BY u.display_name
     LIMIT 10
   `, [`%${q}%`]);
 

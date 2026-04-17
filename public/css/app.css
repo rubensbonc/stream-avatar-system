@@ -758,6 +758,54 @@ nav {
 .item-search-grant input { width: 100%; padding: 0.5rem 0.75rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); font-family: 'Quicksand', sans-serif; font-size: 0.9rem; }
 .item-search-grant input:focus { outline: none; border-color: var(--accent-secondary); box-shadow: 0 0 12px var(--glow-purple); }
 .search-results { position: absolute; top: 100%; left: 0; right: 0; background: rgba(20,16,35,0.97); border: 1px solid var(--border); border-radius: var(--radius); z-index: 50; max-height: 300px; overflow-y: auto; backdrop-filter: blur(15px); margin-top: 0.25rem; }
+
+/* User suggestion dropdown rows */
+.user-suggestion-row {
+  padding: 0.65rem 0.85rem !important;
+  align-items: flex-start !important;
+}
+
+.user-suggestion-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.user-suggestion-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.user-suggestion-accounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.user-suggestion-account {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: rgba(168,85,199,0.08);
+  border: 1px solid var(--border);
+  border-radius: 3.125rem;
+  padding: 0.1rem 0.5rem;
+  letter-spacing: 0.3px;
+}
+
+.user-suggestion-points {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+  padding-top: 0.15rem;
+}
+
+.user-suggestion-row:hover .user-suggestion-account {
+  border-color: var(--border-hover);
+}
 .search-result-row { display: flex; justify-content: space-between; padding: 0.5rem 0.75rem; cursor: pointer; transition: all 0.2s; }
 .search-result-row:hover { background: var(--bg-hover); color: var(--accent); }
 .owners-list { max-height: 300px; overflow-y: auto; }
