@@ -233,6 +233,88 @@ router.get('/users/search', requireAdmin, async (req, res) => {
   res.json(users);
 });
 
+// Get full user detail for admin panel
+router.get('/users/:userId/detail', requireAdmin, async (req, res) => {
+  try {
+    const user = await db.getOne(`
+      SELECT u.*,
+        (SELECT COUNT(*) FROM user_inventory WHERE user_id = u.id) as items_owned,
+        (SELECT COALESCE(SUM(amount), 0) FROM point_transactions WHERE user_id = u.id AND amount > 0) as total_earned,
+        (SELECT COALESCE(SUM(ABS(amount)), 0) FROM point_transactions WHERE user_id = u.id AND amount < 0) as total_spent
+      FROM users u WHERE u.id = $1
+    `, [req.params.userId]);
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const linkedAccounts = await db.getMany(
+      'SELECT platform, platform_user_id, platform_username, platform_email, is_primary, linked_at FROM linked_accounts WHERE user_id = $1',
+      [req.params.userId]
+    );
+
+    const inventory = await db.getMany(`
+      SELECT i.id, i.name, i.layer_type, i.rarity, i.thumbnail_filename, i.image_filename, ui.equipped, ui.acquired_at
+      FROM user_inventory ui
+      JOIN items i ON i.id = ui.item_id
+      WHERE ui.user_id = $1
+      ORDER BY ui.acquired_at DESC
+    `, [req.params.userId]);
+
+    const transactions = await db.getMany(`
+      SELECT amount, reason, platform, metadata, created_at
+      FROM point_transactions
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 20
+    `, [req.params.userId]);
+
+    res.json({ user, linked_accounts: linkedAccounts, inventory, transactions });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.users.detail' });
+    res.status(500).json({ error: 'Failed to fetch user detail', error_id: errorId });
+  }
+});
+
+// Admin: reset user points to 0
+router.post('/users/:userId/reset-points', requireAdmin, async (req, res) => {
+  try {
+    const result = await db.transaction(async (client) => {
+      const { rows: [user] } = await client.query(
+        'SELECT points_balance FROM users WHERE id = $1',
+        [req.params.userId]
+      );
+      if (!user) return null;
+
+      await client.query('UPDATE users SET points_balance = 0, updated_at = NOW() WHERE id = $1', [req.params.userId]);
+
+      if (user.points_balance > 0) {
+        await client.query(`
+          INSERT INTO point_transactions (user_id, amount, reason, platform, metadata)
+          VALUES ($1, $2, 'admin_reset', 'admin', $3)
+        `, [req.params.userId, -user.points_balance, JSON.stringify({ reset_from: user.points_balance })]);
+      }
+
+      return user;
+    });
+
+    if (!result) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, previous_balance: result.points_balance });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.users.reset_points' });
+    res.status(500).json({ error: 'Failed to reset points', error_id: errorId });
+  }
+});
+
+// Admin: delete user
+router.delete('/users/:userId', requireAdmin, async (req, res) => {
+  try {
+    await db.query('DELETE FROM users WHERE id = $1', [req.params.userId]);
+    res.json({ success: true });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.users.delete' });
+    res.status(500).json({ error: 'Failed to delete user', error_id: errorId });
+  }
+});
+
 // Get item detail with owner list
 router.get('/items/:itemId/detail', requireAdmin, async (req, res) => {
   const item = await db.getOne('SELECT * FROM items WHERE id = $1', [req.params.itemId]);

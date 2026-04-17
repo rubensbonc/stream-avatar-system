@@ -192,6 +192,15 @@
             </div>
           </div>
 
+          <!-- User Management -->
+          <div class="admin-card">
+            <h3>User Management</h3>
+            <div class="item-search-grant">
+              <input type="text" id="userMgmtSearch" placeholder="Search users by name or platform username..." oninput="app.searchUsersForMgmt(this.value)">
+              <div id="userMgmtResults" class="search-results"></div>
+            </div>
+          </div>
+
           <!-- Manage Items -->
           <div class="admin-card">
             <h3>All Items</h3>
@@ -276,6 +285,36 @@
           </div>
 
           <button class="btn btn-secondary mt-2" onclick="app.closeItemDetail()">Close</button>
+        </div>
+      </div>
+
+      <!-- User Detail Modal (Admin) -->
+      <div id="userDetailModal" class="modal" style="display:none">
+        <div class="modal-content modal-wide">
+          <div class="item-detail-header">
+            <div class="item-detail-info" id="userDetailInfo"></div>
+          </div>
+
+          <div class="user-detail-stats" id="userDetailStats"></div>
+
+          <div class="item-detail-actions" id="userDetailActions"></div>
+
+          <div class="item-detail-section">
+            <h3>Linked Accounts</h3>
+            <div id="userLinkedAccounts"></div>
+          </div>
+
+          <div class="item-detail-section">
+            <h3>Inventory <span id="userInventoryCount" class="text-muted"></span></h3>
+            <div id="userInventoryList" class="admin-items-grid"></div>
+          </div>
+
+          <div class="item-detail-section">
+            <h3>Recent Transactions</h3>
+            <div id="userTransactionsList" class="transaction-list"></div>
+          </div>
+
+          <button class="btn btn-secondary mt-2" onclick="app.closeUserDetail()">Close</button>
         </div>
       </div>
     </main>

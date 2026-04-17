@@ -751,6 +751,163 @@ const app = {
     document.getElementById('thresholdGroup').style.display = type === 'watch_time' ? '' : 'none';
   },
 
+  // ── User Management (Admin) ──
+  _currentUserId: null,
+  _userSearchTimer: null,
+
+  async searchUsersForMgmt(query) {
+    clearTimeout(this._userSearchTimer);
+    const container = document.getElementById('userMgmtResults');
+    if (query.length < 2) { container.innerHTML = ''; return; }
+
+    this._userSearchTimer = setTimeout(async () => {
+      const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(query)}`);
+      const users = await res.json();
+      container.innerHTML = users.map(u => `
+        <div class="search-result-row" onclick="app.openUserDetail('${u.id}')">
+          <span>${this.escapeHtml(u.display_name)}</span>
+          <span class="text-muted">✦ ${u.points_balance.toLocaleString()}</span>
+        </div>
+      `).join('') || '<div class="search-result-row text-muted">No users found</div>';
+    }, 250);
+  },
+
+  async openUserDetail(userId) {
+    this._currentUserId = userId;
+    document.getElementById('userDetailModal').style.display = 'flex';
+    document.getElementById('userMgmtSearch').value = '';
+    document.getElementById('userMgmtResults').innerHTML = '';
+    await this.loadUserDetail(userId);
+  },
+
+  closeUserDetail() {
+    document.getElementById('userDetailModal').style.display = 'none';
+    this._currentUserId = null;
+  },
+
+  async loadUserDetail(userId) {
+    const res = await fetch(`/api/admin/users/${userId}/detail`);
+    const data = await res.json();
+    if (data.error) {
+      this.toast(data.error, 'error');
+      return;
+    }
+    const { user, linked_accounts, inventory, transactions } = data;
+
+    // Info header
+    document.getElementById('userDetailInfo').innerHTML = `
+      <h2>${this.escapeHtml(user.display_name)}</h2>
+      ${user.is_admin ? '<span class="status-badge status-active">Admin</span>' : ''}
+      <p class="text-muted mt-1">Joined ${new Date(user.created_at).toLocaleDateString()}${user.last_seen_at ? ' · Last seen ' + new Date(user.last_seen_at).toLocaleString() : ''}</p>
+      <p class="text-muted">ID: <code>${this.escapeHtml(user.id)}</code></p>
+    `;
+
+    // Stats
+    document.getElementById('userDetailStats').innerHTML = `
+      <div class="stat-card"><div class="stat-value">${(user.points_balance || 0).toLocaleString()}</div><div class="stat-label">Points</div></div>
+      <div class="stat-card"><div class="stat-value">${(user.watch_time_minutes || 0).toLocaleString()}</div><div class="stat-label">Watch Min</div></div>
+      <div class="stat-card"><div class="stat-value">${user.streak_days || 0}</div><div class="stat-label">Streak</div></div>
+      <div class="stat-card"><div class="stat-value">${user.items_owned || 0}</div><div class="stat-label">Items</div></div>
+      <div class="stat-card"><div class="stat-value">${parseInt(user.total_earned || 0).toLocaleString()}</div><div class="stat-label">Earned</div></div>
+      <div class="stat-card"><div class="stat-value">${parseInt(user.total_spent || 0).toLocaleString()}</div><div class="stat-label">Spent</div></div>
+    `;
+
+    // Actions
+    document.getElementById('userDetailActions').innerHTML = `
+      <button class="btn btn-sm btn-primary" onclick="app.grantUserPoints('${user.id}')">Grant Points</button>
+      <button class="btn btn-sm btn-secondary" onclick="app.resetUserPoints('${user.id}')">Reset Points</button>
+      <button class="btn btn-sm btn-danger" onclick="app.deleteUser('${user.id}', '${this.escapeHtml((user.display_name || '').replace(/'/g, "\\'"))}')">Delete User</button>
+    `;
+
+    // Linked accounts
+    const platformEmoji = { twitch: '💜', youtube: '🔴', streamelements: '🔷' };
+    document.getElementById('userLinkedAccounts').innerHTML = linked_accounts.length === 0
+      ? '<p class="text-muted">No linked accounts</p>'
+      : linked_accounts.map(a => `
+        <div class="equipped-slot mt-1">
+          <span>${platformEmoji[a.platform] || '🔗'}</span>
+          <div>
+            <div class="slot-label">${this.escapeHtml(a.platform)}${a.is_primary ? ' (primary)' : ''}</div>
+            <div class="item-name">${this.escapeHtml(a.platform_username || 'Unknown')}</div>
+          </div>
+          <span class="text-muted" style="font-size:0.7rem">${new Date(a.linked_at).toLocaleDateString()}</span>
+        </div>
+      `).join('');
+
+    // Inventory
+    document.getElementById('userInventoryCount').textContent = `(${inventory.length})`;
+    document.getElementById('userInventoryList').innerHTML = inventory.length === 0
+      ? '<p class="text-muted">No items owned</p>'
+      : inventory.map(item => `
+        <div class="item-card ${item.equipped ? 'equipped' : ''}">
+          <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
+          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}" onerror="this.style.display='none'">
+          <div class="item-name">${this.escapeHtml(item.name)}</div>
+          <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
+          ${item.equipped ? '<div style="font-size:0.7rem;color:var(--accent)">✓ Equipped</div>' : ''}
+        </div>
+      `).join('');
+
+    // Transactions
+    document.getElementById('userTransactionsList').innerHTML = transactions.length === 0
+      ? '<p class="text-muted">No transactions</p>'
+      : transactions.map(t => `
+        <div class="transaction-row">
+          <span class="transaction-amount ${t.amount > 0 ? 'positive' : 'negative'}">${t.amount > 0 ? '+' : ''}${t.amount.toLocaleString()}</span>
+          <span class="transaction-reason">${this.escapeHtml(t.reason)}</span>
+          <span class="text-muted" style="font-size:0.75rem">${this.escapeHtml(t.platform || '')}</span>
+          <span class="text-muted" style="font-size:0.7rem;margin-left:auto">${new Date(t.created_at).toLocaleString()}</span>
+        </div>
+      `).join('');
+  },
+
+  async grantUserPoints(userId) {
+    const input = prompt('How many points to grant?', '100');
+    if (!input) return;
+    const amount = parseInt(input);
+    if (!amount || amount <= 0) return this.toast('Invalid amount', 'error');
+
+    const res = await fetch('/api/admin/grant-points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, amount, reason: 'admin_grant' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      this.toast(`Granted ${amount} points`, 'success');
+      await this.loadUserDetail(userId);
+    } else {
+      this.toast(data.error || 'Grant failed', 'error');
+    }
+  },
+
+  async resetUserPoints(userId) {
+    if (!confirm('Reset this user\'s points to 0?')) return;
+    const res = await fetch(`/api/admin/users/${userId}/reset-points`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast(`Reset from ${data.previous_balance?.toLocaleString() || 0} points`, 'success');
+      await this.loadUserDetail(userId);
+    } else {
+      this.toast(data.error || 'Reset failed', 'error');
+    }
+  },
+
+  async deleteUser(userId, displayName) {
+    if (!confirm(`Delete user "${displayName}"? This removes their points, inventory, and account permanently.`)) return;
+    if (!confirm('This cannot be undone. Really delete?')) return;
+
+    const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast(`Deleted ${displayName}`, 'success');
+      this.closeUserDetail();
+      await this.loadAdmin();
+    } else {
+      this.toast(data.error || 'Delete failed', 'error');
+    }
+  },
+
   // ── Error Log ──
   _errorOffset: 0,
   _errorLimit: 20,
