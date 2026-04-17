@@ -316,6 +316,21 @@ router.post('/users/:userId/reset-points', requireAdmin, async (req, res) => {
   }
 });
 
+// Admin: toggle user visibility on leaderboard
+router.put('/users/:userId/leaderboard-visibility', requireAdmin, async (req, res) => {
+  try {
+    const user = await db.getOne(
+      'UPDATE users SET hide_from_leaderboard = NOT hide_from_leaderboard WHERE id = $1 RETURNING hide_from_leaderboard',
+      [req.params.userId]
+    );
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, hide_from_leaderboard: user.hide_from_leaderboard });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.users.leaderboard_visibility' });
+    res.status(500).json({ error: 'Failed to toggle visibility', error_id: errorId });
+  }
+});
+
 // Admin: delete user
 router.delete('/users/:userId', requireAdmin, async (req, res) => {
   try {

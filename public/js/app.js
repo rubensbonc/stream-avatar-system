@@ -837,6 +837,7 @@ const app = {
     document.getElementById('userDetailInfo').innerHTML = `
       <h2>${this.escapeHtml(user.display_name)}</h2>
       ${user.is_admin ? '<span class="status-badge status-active">Admin</span>' : ''}
+      ${user.hide_from_leaderboard ? '<span class="status-badge status-disabled">Hidden from leaderboard</span>' : ''}
       <p class="text-muted mt-1">Joined ${new Date(user.created_at).toLocaleDateString()}${user.last_seen_at ? ' · Last seen ' + new Date(user.last_seen_at).toLocaleString() : ''}</p>
       <p class="text-muted">ID: <code>${this.escapeHtml(user.id)}</code></p>
     `;
@@ -855,6 +856,9 @@ const app = {
     document.getElementById('userDetailActions').innerHTML = `
       <button class="btn btn-sm btn-primary" onclick="app.grantUserPoints('${user.id}')">Grant Points</button>
       <button class="btn btn-sm btn-secondary" onclick="app.resetUserPoints('${user.id}')">Reset Points</button>
+      <button class="btn btn-sm ${user.hide_from_leaderboard ? 'btn-success' : 'btn-secondary'}" onclick="app.toggleLeaderboardVisibility('${user.id}')">
+        ${user.hide_from_leaderboard ? 'Show on Leaderboard' : 'Hide from Leaderboard'}
+      </button>
       <button class="btn btn-sm btn-danger" onclick="app.deleteUser('${user.id}', '${this.escapeHtml((user.display_name || '').replace(/'/g, "\\'"))}')">Delete User</button>
     `;
 
@@ -929,6 +933,17 @@ const app = {
       await this.loadUserDetail(userId);
     } else {
       this.toast(data.error || 'Reset failed', 'error');
+    }
+  },
+
+  async toggleLeaderboardVisibility(userId) {
+    const res = await fetch(`/api/admin/users/${userId}/leaderboard-visibility`, { method: 'PUT' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast(data.hide_from_leaderboard ? 'User hidden from leaderboard' : 'User visible on leaderboard', 'success');
+      await this.loadUserDetail(userId);
+    } else {
+      this.toast(data.error || 'Toggle failed', 'error');
     }
   },
 

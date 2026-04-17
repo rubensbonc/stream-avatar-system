@@ -41,6 +41,7 @@ router.get('/leaderboard', asyncHandler(async (req, res) => {
     SELECT u.id, u.display_name, u.points_balance, u.watch_time_minutes, u.streak_days,
       (SELECT COUNT(*) FROM user_inventory WHERE user_id = u.id) as items_owned
     FROM users u
+    WHERE u.hide_from_leaderboard = FALSE
     ORDER BY ${orderBy} DESC
     LIMIT $1
   `, [limit]);
