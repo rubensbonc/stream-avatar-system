@@ -33,8 +33,24 @@ const upload = multer({
 
 // ── Item Management ──
 
+// Helper: generate a 256x256 thumbnail for an uploaded file
+async function makeThumbnail(file) {
+  const thumbFilename = `thumb_${file.filename}`;
+  await sharp(file.path)
+    .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(path.join(file.destination, thumbFilename));
+  return thumbFilename;
+}
+
+// Upload config that accepts a single main image AND/OR multiple variant images
+const itemUpload = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'variant_images', maxCount: 12 },
+]);
+
 // Create a new cosmetic item
-router.post('/items', requireAdmin, upload.single('image'), async (req, res) => {
+router.post('/items', requireAdmin, itemUpload, async (req, res) => {
   try {
     const {
       name, description, layer_type, rarity = 'common',
@@ -43,15 +59,47 @@ router.post('/items', requireAdmin, upload.single('image'), async (req, res) => 
       available_from, available_until, category, tags
     } = req.body;
 
-    if (!req.file) return res.status(400).json({ error: 'Image file required' });
     if (!name || !layer_type) return res.status(400).json({ error: 'name and layer_type required' });
 
-    // Generate thumbnail
-    const thumbFilename = `thumb_${req.file.filename}`;
-    await sharp(req.file.path)
-      .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .png()
-      .toFile(path.join(req.file.destination, thumbFilename));
+    const mainFile = req.files?.image?.[0];
+    const variantFiles = req.files?.variant_images || [];
+    const variantNames = req.body.variant_names
+      ? (Array.isArray(req.body.variant_names) ? req.body.variant_names : [req.body.variant_names])
+      : [];
+
+    // Determine mode: variants if 2+ variant files, else single image
+    const isVariantItem = variantFiles.length >= 2;
+
+    if (!isVariantItem && !mainFile) {
+      return res.status(400).json({ error: 'Image file required (or 2+ variant images)' });
+    }
+    if (isVariantItem && variantNames.length !== variantFiles.length) {
+      return res.status(400).json({ error: 'Each variant must have a name' });
+    }
+
+    // Generate main thumbnail + variants array
+    let mainImageFilename, mainThumbFilename;
+    let variants = null;
+
+    if (isVariantItem) {
+      variants = [];
+      for (let i = 0; i < variantFiles.length; i++) {
+        const file = variantFiles[i];
+        const thumb = await makeThumbnail(file);
+        variants.push({
+          id: uuidv4(),
+          name: variantNames[i] || `Variant ${i + 1}`,
+          image_filename: file.filename,
+          thumbnail_filename: thumb,
+        });
+      }
+      // Use the first variant as the main image too (for legacy rendering / fallback)
+      mainImageFilename = variants[0].image_filename;
+      mainThumbFilename = variants[0].thumbnail_filename;
+    } else {
+      mainImageFilename = mainFile.filename;
+      mainThumbFilename = await makeThumbnail(mainFile);
+    }
 
     // Layer order mapping
     const layerOrders = {
@@ -62,16 +110,17 @@ router.post('/items', requireAdmin, upload.single('image'), async (req, res) => 
     const item = await db.getOne(`
       INSERT INTO items (name, description, layer_type, layer_order, rarity, image_filename, thumbnail_filename,
         unlock_type, unlock_cost, unlock_threshold, is_default, is_limited,
-        available_from, available_until, category, tags)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        available_from, available_until, category, tags, variants)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING *
     `, [
       name, description, layer_type, layerOrders[layer_type] || 0, rarity,
-      req.file.filename, thumbFilename,
+      mainImageFilename, mainThumbFilename,
       unlock_type, parseInt(unlock_cost) || 0, unlock_threshold ? parseInt(unlock_threshold) : null,
       is_default === 'true' || is_default === 'on' || is_default === true, is_limited === 'true' || is_limited === 'on' || is_limited === true,
       available_from || null, available_until || null,
-      category || null, tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : null
+      category || null, tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : null,
+      variants ? JSON.stringify(variants) : null
     ]);
 
     res.json({ success: true, item });
@@ -388,6 +437,123 @@ router.put('/items/:itemId/toggle', requireAdmin, async (req, res) => {
     [req.params.itemId]
   );
   res.json({ success: true, item });
+});
+
+// ── Variant Management ──
+
+// Add a new variant to an existing item (name + image file)
+router.post('/items/:itemId/variants', requireAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'Image file required' });
+    if (!name) return res.status(400).json({ error: 'Variant name required' });
+
+    const item = await db.getOne('SELECT * FROM items WHERE id = $1', [req.params.itemId]);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const thumb = await makeThumbnail(req.file);
+    const newVariant = {
+      id: uuidv4(),
+      name,
+      image_filename: req.file.filename,
+      thumbnail_filename: thumb,
+    };
+
+    const existingVariants = Array.isArray(item.variants) ? item.variants : [];
+    const updatedVariants = [...existingVariants, newVariant];
+
+    // If this is the 2nd variant (transitioning from normal to variant item),
+    // prepend the existing main image as the first variant
+    let finalVariants = updatedVariants;
+    if (existingVariants.length === 0) {
+      // First variant added to a normal item -- treat the current main image as the default variant
+      finalVariants = [
+        {
+          id: uuidv4(),
+          name: 'Original',
+          image_filename: item.image_filename,
+          thumbnail_filename: item.thumbnail_filename,
+        },
+        newVariant,
+      ];
+    }
+
+    const updated = await db.getOne(
+      'UPDATE items SET variants = $1 WHERE id = $2 RETURNING *',
+      [JSON.stringify(finalVariants), req.params.itemId]
+    );
+
+    res.json({ success: true, item: updated });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.items.variants.add' });
+    res.status(500).json({ error: 'Failed to add variant', error_id: errorId });
+  }
+});
+
+// Rename a variant
+router.put('/items/:itemId/variants/:variantId', requireAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name required' });
+
+    const item = await db.getOne('SELECT variants FROM items WHERE id = $1', [req.params.itemId]);
+    if (!item || !Array.isArray(item.variants)) return res.status(404).json({ error: 'Item or variants not found' });
+
+    const updatedVariants = item.variants.map(v =>
+      v.id === req.params.variantId ? { ...v, name } : v
+    );
+
+    const updated = await db.getOne(
+      'UPDATE items SET variants = $1 WHERE id = $2 RETURNING *',
+      [JSON.stringify(updatedVariants), req.params.itemId]
+    );
+
+    res.json({ success: true, item: updated });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.items.variants.rename' });
+    res.status(500).json({ error: 'Failed to rename variant', error_id: errorId });
+  }
+});
+
+// Remove a variant
+router.delete('/items/:itemId/variants/:variantId', requireAdmin, async (req, res) => {
+  try {
+    const item = await db.getOne('SELECT variants FROM items WHERE id = $1', [req.params.itemId]);
+    if (!item || !Array.isArray(item.variants)) return res.status(404).json({ error: 'Item or variants not found' });
+
+    const remaining = item.variants.filter(v => v.id !== req.params.variantId);
+
+    // If 1 variant left, flatten back to a regular item (variants = null)
+    // If 0 variants left (shouldn't happen but defensively), also flatten
+    let updated;
+    if (remaining.length <= 1) {
+      const keep = remaining[0] || item.variants[0];
+      updated = await db.getOne(
+        `UPDATE items SET variants = NULL, image_filename = $1, thumbnail_filename = $2 WHERE id = $3 RETURNING *`,
+        [keep.image_filename, keep.thumbnail_filename, req.params.itemId]
+      );
+      // Clear selected_variant_id on all user_inventory rows for this item
+      await db.query(
+        'UPDATE user_inventory SET selected_variant_id = NULL WHERE item_id = $1',
+        [req.params.itemId]
+      );
+    } else {
+      updated = await db.getOne(
+        'UPDATE items SET variants = $1 WHERE id = $2 RETURNING *',
+        [JSON.stringify(remaining), req.params.itemId]
+      );
+      // Fall back users who had the deleted variant selected
+      await db.query(
+        'UPDATE user_inventory SET selected_variant_id = NULL WHERE item_id = $1 AND selected_variant_id = $2',
+        [req.params.itemId, req.params.variantId]
+      );
+    }
+
+    res.json({ success: true, item: updated });
+  } catch (err) {
+    const errorId = await errorLogger.logError(err, { req, source: 'admin.items.variants.remove' });
+    res.status(500).json({ error: 'Failed to remove variant', error_id: errorId });
+  }
 });
 
 // Re-enable an expired limited item (resets available_until)

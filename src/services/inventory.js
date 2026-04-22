@@ -7,7 +7,7 @@ class InventoryService {
    */
   async getUserInventory(userId) {
     return db.getMany(`
-      SELECT i.*, ui.equipped, ui.acquired_at
+      SELECT i.*, ui.equipped, ui.acquired_at, ui.selected_variant_id
       FROM user_inventory ui
       JOIN items i ON i.id = ui.item_id
       WHERE ui.user_id = $1
@@ -20,12 +20,47 @@ class InventoryService {
    */
   async getEquippedItems(userId) {
     return db.getMany(`
-      SELECT i.*
+      SELECT i.*, ui.selected_variant_id
       FROM user_inventory ui
       JOIN items i ON i.id = ui.item_id
       WHERE ui.user_id = $1 AND ui.equipped = TRUE
       ORDER BY i.layer_order ASC
     `, [userId]);
+  }
+
+  /**
+   * Resolve the effective image filename for an item based on its selected variant.
+   * Falls back to the item's main image if no variants or no valid selection.
+   */
+  resolveImage(item) {
+    if (item.variants && Array.isArray(item.variants) && item.variants.length > 0) {
+      const selected = item.selected_variant_id
+        ? item.variants.find(v => v.id === item.selected_variant_id)
+        : null;
+      return (selected || item.variants[0]).image_filename;
+    }
+    return item.image_filename;
+  }
+
+  /**
+   * Set the selected variant for a user's inventory entry.
+   */
+  async setVariant(userId, itemId, variantId) {
+    const item = await db.getOne('SELECT variants FROM items WHERE id = $1', [itemId]);
+    if (!item) return { success: false, error: 'Item not found' };
+    if (!item.variants || !Array.isArray(item.variants) || item.variants.length === 0) {
+      return { success: false, error: 'Item has no variants' };
+    }
+    const valid = item.variants.some(v => v.id === variantId);
+    if (!valid) return { success: false, error: 'Invalid variant' };
+
+    const result = await db.getOne(
+      'UPDATE user_inventory SET selected_variant_id = $1 WHERE user_id = $2 AND item_id = $3 RETURNING id',
+      [variantId, userId, itemId]
+    );
+    if (!result) return { success: false, error: 'Item not owned' };
+
+    return { success: true };
   }
 
   /**

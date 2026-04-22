@@ -148,9 +148,9 @@
                 <label>Description</label>
                 <textarea name="description" rows="2"></textarea>
               </div>
-              <div class="form-group">
+              <div class="form-group" id="mainImageGroup">
                 <label>Image (PNG, transparent background, consistent canvas size)</label>
-                <input type="file" name="image" accept=".png,.webp,.gif" required>
+                <input type="file" name="image" accept=".png,.webp,.gif" id="mainImageInput">
               </div>
               <div class="form-row">
                 <label class="checkbox-label">
@@ -159,6 +159,16 @@
                 <label class="checkbox-label">
                   <input type="checkbox" name="is_limited" onchange="app.toggleLimitedFields(this.checked)"> Limited Time
                 </label>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="has_variants" id="hasVariantsCheckbox" onchange="app.toggleVariantFields(this.checked)"> Has color variants
+                </label>
+              </div>
+              <div id="variantsFields" style="display:none">
+                <label class="form-label" style="font-size:0.85rem;color:var(--text-secondary);font-weight:500;margin-bottom:0.5rem;display:block;">
+                  Color Variants (at least 2, each with a name + image)
+                </label>
+                <div id="variantsContainer"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="app.addVariantRow()">+ Add Variant</button>
               </div>
               <div class="form-row limited-fields" id="limitedFields" style="display:none">
                 <div class="form-group">
@@ -274,6 +284,16 @@
           </div>
 
           <div class="item-detail-actions" id="itemDetailActions"></div>
+
+          <div class="item-detail-section" id="itemVariantsSection">
+            <h3>Color Variants</h3>
+            <div id="itemVariantsList"></div>
+            <div class="variant-add-form">
+              <input type="text" id="newVariantName" placeholder="Variant name (e.g. Red)">
+              <input type="file" id="newVariantImage" accept=".png,.webp,.gif">
+              <button class="btn btn-sm btn-primary" onclick="app.addVariantToItem()">+ Add Variant</button>
+            </div>
+          </div>
 
           <div class="item-detail-section">
             <h3>Owners <span id="itemOwnerCount" class="text-muted"></span></h3>

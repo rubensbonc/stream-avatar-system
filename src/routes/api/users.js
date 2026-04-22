@@ -112,6 +112,14 @@ router.post('/me/unequip/:itemId', requireAuth, asyncHandler(async (req, res) =>
   res.json(result);
 }));
 
+// Set variant for an owned item
+router.post('/me/variant/:itemId', requireAuth, asyncHandler(async (req, res) => {
+  const { variant_id } = req.body;
+  if (!variant_id) return res.status(400).json({ error: 'variant_id required' });
+  const result = await inventoryService.setVariant(req.session.userId, req.params.itemId, variant_id);
+  res.json(result);
+}));
+
 // Daily spin
 router.post('/me/daily-spin', requireAuth, asyncHandler(async (req, res) => {
   const result = await pointsService.dailySpin(req.session.userId);

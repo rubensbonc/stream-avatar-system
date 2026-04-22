@@ -151,7 +151,15 @@ const app = {
         }
       };
       img.onerror = () => { loaded++; };
-      img.src = `/assets/cosmetics/${item.image_filename}`;
+      // Use selected variant if the item has variants
+      let imgFilename = item.image_filename;
+      if (Array.isArray(item.variants) && item.variants.length > 0) {
+        const selected = item.selected_variant_id
+          ? item.variants.find(v => v.id === item.selected_variant_id)
+          : null;
+        imgFilename = (selected || item.variants[0]).image_filename;
+      }
+      img.src = `/assets/cosmetics/${imgFilename}`;
       item._img = img;
     });
   },
@@ -167,16 +175,77 @@ const app = {
 
     container.innerHTML = this.equippedItems
       .sort((a, b) => a.layer_order - b.layer_order)
-      .map(item => `
-        <div class="equipped-slot">
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
-          <div>
-            <div class="slot-label">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
-            <div class="item-name">${this.escapeHtml(item.name)}</div>
+      .map(item => {
+        const variants = Array.isArray(item.variants) ? item.variants : [];
+        const hasVariants = variants.length > 1;
+        const selectedId = item.selected_variant_id || (hasVariants ? variants[0].id : null);
+        const currentVariant = hasVariants ? (variants.find(v => v.id === selectedId) || variants[0]) : null;
+        const imgFilename = currentVariant ? currentVariant.thumbnail_filename || currentVariant.image_filename : (item.thumbnail_filename || item.image_filename);
+
+        const swatches = hasVariants ? `
+          <div class="variant-swatches">
+            ${variants.map(v => `
+              <button
+                class="variant-swatch ${v.id === selectedId ? 'active' : ''}"
+                title="${this.escapeHtml(v.name)}"
+                onclick="app.selectVariant('${item.id}', '${v.id}')"
+              >
+                <img src="/assets/cosmetics/${v.thumbnail_filename || v.image_filename}" alt="${this.escapeHtml(v.name)}">
+              </button>
+            `).join('')}
           </div>
-          <button class="btn btn-sm btn-secondary" onclick="app.unequip('${item.id}')">✕</button>
-        </div>
-      `).join('');
+        ` : '';
+
+        return `
+          <div class="equipped-slot ${hasVariants ? 'has-variants' : ''}">
+            <img src="/assets/cosmetics/${imgFilename}" alt="${this.escapeHtml(item.name)}">
+            <div class="equipped-slot-info">
+              <div class="slot-label">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
+              <div class="item-name">${this.escapeHtml(item.name)}${currentVariant ? ' · <span class="variant-label">' + this.escapeHtml(currentVariant.name) + '</span>' : ''}</div>
+              ${swatches}
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="app.unequip('${item.id}')">✕</button>
+          </div>
+        `;
+      }).join('');
+  },
+
+  // ── Variant rotation (shop/inventory previews) ──
+  _variantRotationCounter: 0,
+  _variantRotationInterval: null,
+
+  startVariantRotations() {
+    if (this._variantRotationInterval) return; // already running
+    this._variantRotationInterval = setInterval(() => {
+      this._variantRotationCounter++;
+      document.querySelectorAll('img[data-variants]').forEach(img => {
+        try {
+          const variants = JSON.parse(img.dataset.variants);
+          if (!Array.isArray(variants) || variants.length < 2) return;
+          const idx = this._variantRotationCounter % variants.length;
+          if (img.src !== variants[idx]) img.src = variants[idx];
+        } catch (e) { /* ignore */ }
+      });
+    }, 1500);
+  },
+
+  _itemImageSrc(item) {
+    // Returns { src, dataAttrs, isVariantItem } for rendering item previews
+    const hasVariants = Array.isArray(item.variants) && item.variants.length > 1;
+    if (hasVariants) {
+      const urls = item.variants.map(v => `/assets/cosmetics/${v.thumbnail_filename || v.image_filename}`);
+      const encoded = JSON.stringify(urls).replace(/"/g, '&quot;');
+      return {
+        src: urls[0],
+        dataAttrs: `data-variants="${encoded}"`,
+        isVariantItem: true,
+      };
+    }
+    return {
+      src: `/assets/cosmetics/${item.thumbnail_filename || item.image_filename}`,
+      dataAttrs: '',
+      isVariantItem: false,
+    };
   },
 
   // ── Shop ──
@@ -196,12 +265,17 @@ const app = {
       const limitedBadge = item.is_limited && item.available_until
         ? `<span class="limited-badge" data-until="${item.available_until}">⏳ ${this.getTimeRemaining(item.available_until)}</span>`
         : '';
+      const media = this._itemImageSrc(item);
+      const variantBadge = media.isVariantItem
+        ? `<span class="variant-badge">🎨 ${item.variants.length} colors</span>`
+        : '';
 
       return `
         <div class="item-card ${isOwned ? 'owned' : ''} ${isEquipped ? 'equipped' : ''}">
           <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
+          ${variantBadge}
           ${limitedBadge}
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
+          <img src="${media.src}" ${media.dataAttrs} alt="${this.escapeHtml(item.name)}">
           <div class="item-name">${this.escapeHtml(item.name)}</div>
           <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
           <div class="item-cost">${costLabel}</div>
@@ -219,6 +293,7 @@ const app = {
 
     // Start countdown timer for limited items
     this.startLimitedCountdowns();
+    this.startVariantRotations();
   },
 
   getTimeRemaining(until) {
@@ -292,10 +367,15 @@ const app = {
 
     container.innerHTML = this.inventory.map(item => {
       const isEquipped = item.equipped;
+      const media = this._itemImageSrc(item);
+      const variantBadge = media.isVariantItem
+        ? `<span class="variant-badge">🎨 ${item.variants.length} colors</span>`
+        : '';
       return `
         <div class="item-card ${isEquipped ? 'equipped' : ''}">
           <span class="rarity-badge rarity-${this.escapeHtml(item.rarity)}">${this.escapeHtml(item.rarity)}</span>
-          <img src="/assets/cosmetics/${item.thumbnail_filename || item.image_filename}" alt="${this.escapeHtml(item.name)}">
+          ${variantBadge}
+          <img src="${media.src}" ${media.dataAttrs} alt="${this.escapeHtml(item.name)}">
           <div class="item-name">${this.escapeHtml(item.name)}</div>
           <div class="item-layer">${this.escapeHtml(item.layer_type.replace('_', ' '))}</div>
           <div class="item-actions">
@@ -307,6 +387,7 @@ const app = {
         </div>
       `;
     }).join('');
+    this.startVariantRotations();
   },
 
   // ── Actions ──
@@ -340,6 +421,24 @@ const app = {
       }
     } catch (err) {
       this.toast('Failed to equip', 'error');
+    }
+  },
+
+  async selectVariant(itemId, variantId) {
+    try {
+      const res = await fetch(`/api/users/me/variant/${itemId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variant_id: variantId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await this.loadUserData();
+      } else {
+        this.toast(data.error || 'Failed to change variant', 'error');
+      }
+    } catch (err) {
+      this.toast('Failed to change variant', 'error');
     }
   },
 
@@ -600,6 +699,21 @@ const app = {
       ` : ''}
     `;
 
+    // Variants section
+    const variantsList = document.getElementById('itemVariantsList');
+    const variants = Array.isArray(item.variants) ? item.variants : [];
+    if (variants.length === 0) {
+      variantsList.innerHTML = '<p class="text-muted">No variants. Add one below to convert this into a color variant item.</p>';
+    } else {
+      variantsList.innerHTML = variants.map(v => `
+        <div class="variant-manage-row">
+          <img src="/assets/cosmetics/${v.thumbnail_filename || v.image_filename}" alt="${this.escapeHtml(v.name)}">
+          <input type="text" value="${this.escapeHtml(v.name)}" onblur="app.renameVariant('${itemId}', '${v.id}', this.value)">
+          <button class="btn btn-sm btn-danger" onclick="app.removeVariant('${itemId}', '${v.id}', '${this.escapeHtml((v.name || '').replace(/'/g, "\\'"))}')">Remove</button>
+        </div>
+      `).join('');
+    }
+
     // Owners
     document.getElementById('itemOwnerCount').textContent = `(${owners.length} / ${total_users} users)`;
     document.getElementById('itemOwnersList').innerHTML = owners.length === 0
@@ -683,6 +797,61 @@ const app = {
     }
   },
 
+  async addVariantToItem() {
+    const itemId = this._currentItemId;
+    if (!itemId) return;
+    const name = document.getElementById('newVariantName').value.trim();
+    const fileInput = document.getElementById('newVariantImage');
+    const file = fileInput.files[0];
+    if (!name || !file) return this.toast('Name and image required', 'error');
+
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('image', file);
+
+    const res = await fetch(`/api/admin/items/${itemId}/variants`, { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.success) {
+      this.toast('Variant added', 'success');
+      document.getElementById('newVariantName').value = '';
+      fileInput.value = '';
+      await this.loadItemDetail(itemId);
+      await this.loadAdmin();
+      await this.loadShop();
+    } else {
+      this.toast(data.error || 'Failed to add variant', 'error');
+    }
+  },
+
+  async renameVariant(itemId, variantId, newName) {
+    if (!newName || !newName.trim()) return;
+    const res = await fetch(`/api/admin/items/${itemId}/variants/${variantId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName.trim() }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      this.toast('Variant renamed', 'success');
+    } else {
+      this.toast(data.error || 'Failed to rename', 'error');
+    }
+  },
+
+  async removeVariant(itemId, variantId, variantName) {
+    if (!confirm(`Remove variant "${variantName}"?`)) return;
+    const res = await fetch(`/api/admin/items/${itemId}/variants/${variantId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      this.toast('Variant removed', 'success');
+      await this.loadItemDetail(itemId);
+      await this.loadAdmin();
+      await this.loadShop();
+    } else {
+      this.toast(data.error || 'Failed to remove variant', 'error');
+    }
+  },
+
   async revokeItem(itemId, userId, displayName) {
     if (!confirm(`Revoke this item from ${displayName}?`)) return;
 
@@ -754,6 +923,33 @@ const app = {
   toggleUnlockFields() {
     const type = document.getElementById('unlockTypeSelect').value;
     document.getElementById('thresholdGroup').style.display = type === 'watch_time' ? '' : 'none';
+  },
+
+  toggleVariantFields(checked) {
+    const variantsFields = document.getElementById('variantsFields');
+    const mainImageGroup = document.getElementById('mainImageGroup');
+    const mainImageInput = document.getElementById('mainImageInput');
+    variantsFields.style.display = checked ? '' : 'none';
+    mainImageGroup.style.display = checked ? 'none' : '';
+    mainImageInput.required = !checked;
+    const container = document.getElementById('variantsContainer');
+    if (checked && container.children.length === 0) {
+      // Start with 2 empty rows
+      this.addVariantRow();
+      this.addVariantRow();
+    }
+  },
+
+  addVariantRow() {
+    const container = document.getElementById('variantsContainer');
+    const row = document.createElement('div');
+    row.className = 'variant-row';
+    row.innerHTML = `
+      <input type="text" name="variant_names" placeholder="Color name (e.g. Red)" required>
+      <input type="file" name="variant_images" accept=".png,.webp,.gif" required>
+      <button type="button" class="btn btn-sm btn-danger" onclick="this.closest('.variant-row').remove()">×</button>
+    `;
+    container.appendChild(row);
   },
 
   // ── User Management (Admin) ──

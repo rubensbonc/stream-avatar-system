@@ -818,6 +818,174 @@ nav {
 .danger-zone h3 { color: var(--danger); margin-bottom: 0.25rem; }
 .danger-zone p { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; }
 
+/* ── Variant Items ── */
+.variant-badge {
+  position: absolute;
+  top: 2.1rem;
+  right: 0.5rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 3.125rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  background: linear-gradient(135deg, rgba(232,54,143,0.18), rgba(168,85,199,0.18), rgba(74,108,247,0.18));
+  color: #fff;
+  border: 1px solid rgba(168,85,199,0.4);
+  white-space: nowrap;
+  box-shadow: 0 0 10px rgba(168,85,199,0.2);
+}
+
+.item-card img {
+  transition: opacity 0.3s;
+}
+
+/* Variant rows in the admin upload form */
+.variant-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.variant-row input[type="text"] {
+  flex: 1;
+  background: rgba(14,11,24,0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.7rem;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.85rem;
+}
+
+.variant-row input[type="file"] {
+  flex: 1;
+  background: rgba(14,11,24,0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.3rem;
+  font-size: 0.8rem;
+}
+
+/* Variant manage rows in item detail modal */
+.variant-manage-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.4rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.variant-manage-row img {
+  width: 3rem;
+  height: 3rem;
+  object-fit: contain;
+  background: rgba(14,11,24,0.5);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.variant-manage-row input {
+  flex: 1;
+  background: rgba(14,11,24,0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.65rem;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.85rem;
+}
+
+.variant-add-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.variant-add-form input[type="text"] {
+  flex: 1;
+  background: rgba(14,11,24,0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.65rem;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.85rem;
+}
+
+.variant-add-form input[type="file"] {
+  flex: 1.5;
+  font-size: 0.8rem;
+}
+
+/* Variant swatches in equipped slot */
+.equipped-slot.has-variants {
+  flex-wrap: wrap;
+}
+
+.equipped-slot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.variant-label {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.variant-swatches {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.variant-swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: rgba(14,11,24,0.6);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.variant-swatch img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.variant-swatch:hover {
+  border-color: var(--border-hover);
+  transform: scale(1.1);
+}
+
+.variant-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--glow-pink);
+}
+
 /* ── Error Log ── */
 .error-filters {
   display: flex;

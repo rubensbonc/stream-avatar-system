@@ -54,7 +54,7 @@ router.post('/trigger', asyncHandler(async (req, res) => {
       name: item.name,
       layer_type: item.layer_type,
       layer_order: item.layer_order,
-      image_url: `/assets/cosmetics/${item.image_filename}`,
+      image_url: `/assets/cosmetics/${inventoryService.resolveImage(item)}`,
     })),
   };
 
@@ -117,7 +117,7 @@ router.get('/avatar/:identifier', asyncHandler(async (req, res) => {
       layer_type: item.layer_type,
       layer_order: item.layer_order,
       rarity: item.rarity,
-      image_url: `/assets/cosmetics/${item.image_filename}`,
+      image_url: `/assets/cosmetics/${inventoryService.resolveImage(item)}`,
     })),
   });
 }));
