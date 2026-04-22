@@ -929,14 +929,20 @@ const app = {
     const variantsFields = document.getElementById('variantsFields');
     const mainImageGroup = document.getElementById('mainImageGroup');
     const mainImageInput = document.getElementById('mainImageInput');
+    const container = document.getElementById('variantsContainer');
+
     variantsFields.style.display = checked ? '' : 'none';
     mainImageGroup.style.display = checked ? 'none' : '';
     mainImageInput.required = !checked;
-    const container = document.getElementById('variantsContainer');
-    if (checked && container.children.length === 0) {
-      // Start with 2 empty rows
-      this.addVariantRow();
-      this.addVariantRow();
+
+    if (checked) {
+      if (container.children.length === 0) {
+        this.addVariantRow();
+        this.addVariantRow();
+      }
+    } else {
+      // Clear variant rows when unchecking so hidden `required` inputs don't block submission
+      container.innerHTML = '';
     }
   },
 
