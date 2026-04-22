@@ -1275,8 +1275,24 @@ const app = {
         e.preventDefault();
         const page = link.dataset.page;
         this.navigateTo(page);
+        // Auto-close mobile nav after selection
+        document.getElementById('navLinks')?.classList.remove('open');
       });
     });
+
+    // Close mobile nav when clicking outside
+    document.addEventListener('click', (e) => {
+      const nav = document.getElementById('navbar');
+      const links = document.getElementById('navLinks');
+      if (!nav || !links) return;
+      if (links.classList.contains('open') && !nav.contains(e.target)) {
+        links.classList.remove('open');
+      }
+    });
+  },
+
+  toggleNav() {
+    document.getElementById('navLinks')?.classList.toggle('open');
   },
 
   navigateTo(page) {
@@ -1288,6 +1304,9 @@ const app = {
     if (page === 'leaderboard') this.loadLeaderboard('points');
     if (page === 'admin') this.loadAdmin();
     if (page === 'shop') this.loadShop();
+
+    // Scroll to top when navigating (better mobile UX)
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   },
 
   // ── WebSocket ──
